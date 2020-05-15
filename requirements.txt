@@ -4,4 +4,3 @@ parasail==1.1.17
 numpy
 scipy
 pytest
-unittest

@@ -3,6 +3,5 @@ parmap==1.5.2
 parasail==1.1.17
 numpy
 scipy
-multiprocessing
 pytest
 unittest

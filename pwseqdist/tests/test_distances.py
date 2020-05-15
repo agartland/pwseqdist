@@ -80,19 +80,19 @@ class TestDistances(unittest.TestCase):
 
     def test_nw_metric(self):
         subst_dict = pwsd.matrices.dict_from_matrix(parasail.blosum62)
-        nw_d = pwsd.metrics.nw_metric(mixed_seqs[0], mixed_seqs[1], matrix=parasail.blosum62, open=3, extend=3)
+        nw_d = pwsd.metrics.nw_metric(mixed_seqs[0], mixed_seqs[1], matrix='blosum62', open=3, extend=3)
         
         for s1, s2 in zip(seqs[-10:], seqs[:10]):
-            nw_d = pwsd.metrics.nw_metric(s1, s2, matrix=parasail.blosum62, open=30, extend=30)
+            nw_d = pwsd.metrics.nw_metric(s1, s2, matrix='blosum62', open=30, extend=30)
             str_d = pwsd.metrics.str_subst_metric(s1, s2, subst_dict, as_similarity=False, na_penalty=None)
             self.assertTrue(nw_d == str_d)
 
     def test_nw_hamming_metric(self):
         subst_dict = pwsd.matrices.dict_from_matrix(parasail.blosum62)
-        nw_d = pwsd.metrics.nw_hamming_metric(mixed_seqs[0], mixed_seqs[1], matrix=parasail.blosum62, open=3, extend=3)
+        nw_d = pwsd.metrics.nw_hamming_metric(mixed_seqs[0], mixed_seqs[1], matrix='blosum62', open=3, extend=3)
         
         for s1, s2 in zip(seqs[-10:], seqs[:10]):
-            nw_d = pwsd.metrics.nw_hamming_metric(s1, s2, matrix=parasail.blosum62, open=30, extend=30)
+            nw_d = pwsd.metrics.nw_hamming_metric(s1, s2, matrix='blosum62', open=30, extend=30)
             str_d = pwsd.metrics.hamming_distance(s1, s2)
             # print('%s\t%s\t%1.0f\t%1.0f' % (s1, s2, str_d, nw_d))
             self.assertTrue(nw_d == str_d)
@@ -116,19 +116,58 @@ class TestApply(unittest.TestCase):
         dmat2 = squareform(dvec2)
 
         self.assertTrue(np.all(dmat2[:10, :][:, :10] == dmat))
+    def test_pw_sq_nonuniq_tcrdist(self):
+        tmp = ['PNSSL', 'KEKRN', 'KEKRN', 'PNASF', 'PNASF', 'PNASF', 'EKKES', 'EKKER', 'IRTEH']
+        res = np.array([[0, 5, 5, 2, 2, 2, 5, 5, 5,],
+                         [5, 0, 0, 5, 5, 5, 4, 4, 5,],
+                         [5, 0, 0, 5, 5, 5, 4, 4, 5,],
+                         [2, 5, 5, 0, 0, 0, 5, 5, 5,],
+                         [2, 5, 5, 0, 0, 0, 5, 5, 5,],
+                         [2, 5, 5, 0, 0, 0, 5, 5, 5,],
+                         [5, 4, 4, 5, 5, 5, 0, 1, 4,],
+                         [5, 4, 4, 5, 5, 5, 1, 0, 4,],
+                         [5, 5, 5, 5, 5, 5, 4, 4, 0,]])
+        dvec = pwsd.apply_pairwise_sq(tmp, pwsd.metrics.nw_hamming_metric, ncpus=1)
+        dmat = squareform(dvec).astype(int)
+        #print(dmat)
+        #print(res)
+        #print(tmp[0], tmp[3], res[0, 3], dmat[0, 3])
+        self.assertTrue(np.all(dmat == res))
+
+    def test_pw_rect_nonuniq_tcrdist(self):
+        tmp = ['PNSSL', 'KEKRN', 'KEKRN', 'PNASF', 'PNASF', 'PNASF', 'EKKES', 'EKKER', 'IRTEH']
+        res = np.array([[0, 5, 5, 2, 2, 2, 5, 5, 5,],
+                         [5, 0, 0, 5, 5, 5, 4, 4, 5,],
+                         [5, 0, 0, 5, 5, 5, 4, 4, 5,],
+                         [2, 5, 5, 0, 0, 0, 5, 5, 5,],
+                         [2, 5, 5, 0, 0, 0, 5, 5, 5,],
+                         [2, 5, 5, 0, 0, 0, 5, 5, 5,],
+                         [5, 4, 4, 5, 5, 5, 0, 1, 4,],
+                         [5, 4, 4, 5, 5, 5, 1, 0, 4,],
+                         [5, 5, 5, 5, 5, 5, 4, 4, 0,]])
+        drect = pwsd.apply_pairwise_rect(tmp, tmp, pwsd.metrics.nw_hamming_metric, ncpus=1)
+        
+        #print(dmat)
+        #print(res)
+        #print(tmp[0], tmp[3], res[0, 3], dmat[0, 3])
+        self.assertTrue(np.all(drect == res))
 
     def test_multiprocessing(self):
         dvec = pwsd.apply_pairwise_sq(seqs[:10], pwsd.metrics.hamming_distance, ncpus=1)
         dvec_multi = pwsd.apply_pairwise_sq(seqs[:10], pwsd.metrics.hamming_distance, ncpus=2)
         self.assertTrue(np.all(dvec == dvec_multi))
+    def test_multiprocessing_parasail(self):
+        dvec = pwsd.apply_pairwise_sq(mixed_seqs[:20], pwsd.metrics.nw_metric, matrix='blosum62', ncpus=1)
+        dvec_multi = pwsd.apply_pairwise_sq(mixed_seqs[:20], pwsd.metrics.nw_metric, matrix='blosum62', ncpus=2)
+        self.assertTrue(np.all(dvec == dvec_multi))
 
     def test_pw_rect(self):
-        indices, dvec = pwsd.apply_pairwise_rect(seqs[:10], seqs[:20], pwsd.metrics.hamming_distance, ncpus=1)
-        self.assertTrue(dvec.shape[0] == 200)
+        drect = pwsd.apply_pairwise_rect(seqs[:10], seqs[:20], pwsd.metrics.hamming_distance, ncpus=1)
+        self.assertTrue(drect.shape == (10, 20))
 
     def test_multiprocessing_more(self):
-        dvec_multi = pwsd.apply_pairwise_sq(mixed_seqs, pwsd.metrics.nw_metric, ncpus=2)
-        dvec = pwsd.apply_pairwise_sq(mixed_seqs, pwsd.metrics.nw_metric, ncpus=1)
+        dvec_multi = pwsd.apply_pairwise_sq(mixed_seqs, pwsd.metrics.nw_metric, matrix='blosum62', ncpus=2)
+        dvec = pwsd.apply_pairwise_sq(mixed_seqs, pwsd.metrics.nw_metric, matrix='blosum62', ncpus=1)
         self.assertTrue(np.all(dvec == dvec_multi)) 
 
 class TestNumba(unittest.TestCase):

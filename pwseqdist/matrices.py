@@ -29,7 +29,10 @@ def dict_from_matrix(mat, alphabet = parasail_aa_alphabet):
     Parameters
     ----------
     mat : parasail substitution Matrix object
-        Example is parasail.blosum62
+        Example is parasail.
+    alphabet : str
+        string of characters usely specifying the 23 AA Parasail 
+        uses for its substitution matrix.
 
     Returns
     -------
@@ -47,12 +50,16 @@ def seq2vec(seq, alphabet = parasail_aa_alphabet_with_unknown ):
     ----------
     seq : string
 
+    alphabet : str
+        string of characters usely specifying the 23 AA Parasail 
+        uses for its substitution matrix.
+
     Returns
     -------
     vec : np.ndarray
 
-    Example 
-    -------
+    Examples 
+    -------_
     >>> seq2vec("CAT")
     array([ 4,  0, 16], dtype=int8)
     >>> seq2vec("ARNDCQEGHILKMFPSTWYVBZX")
@@ -76,6 +83,10 @@ def vec2seq(vec, alphabet = parasail_aa_alphabet_with_unknown  ):
     Parameters
     ----------
     vec : np.array
+
+    alphabet : str
+        string of characters usely specifying the 23 AA Parasail 
+        uses for its substitution matrix.
 
     Returns
     -------

@@ -89,6 +89,7 @@ class TestDistances(unittest.TestCase):
             np_d = pwsd.metrics.np_subst_metric(pwsd.matrices.seq2vec(s1),
                                                 pwsd.matrices.seq2vec(s2),
                                                 parasail.blosum62.matrix, as_similarity=False)
+            # print('%s\t%s\t%1.0f\t%1.0f' % (s1, s2, str_d, np_d))
             self.assertTrue(str_d == np_d)
 
     def test_nw_metric(self):
@@ -96,10 +97,8 @@ class TestDistances(unittest.TestCase):
         nw_d = pwsd.metrics.nw_metric(mixed_seqs[0], mixed_seqs[1], matrix=parasail.blosum62, open=3, extend=3)
         
         for s1, s2 in zip(seqs[-10:], seqs[:10]):
-            nw_d = pwsd.metrics.nw_metric(s1, s2, matrix=parasail.blosum62, open=3, extend=3)
+            nw_d = pwsd.metrics.nw_metric(s1, s2, matrix=parasail.blosum62, open=30, extend=30)
             str_d = pwsd.metrics.str_subst_metric(s1, s2, subst_dict, as_similarity=False, na_penalty=None)
-            #print(nw_d)
-            #print(str_d)
             self.assertTrue(nw_d == str_d)
 
     def test_nw_hamming_metric(self):
@@ -107,8 +106,9 @@ class TestDistances(unittest.TestCase):
         nw_d = pwsd.metrics.nw_hamming_metric(mixed_seqs[0], mixed_seqs[1], matrix=parasail.blosum62, open=3, extend=3)
         
         for s1, s2 in zip(seqs[-10:], seqs[:10]):
-            nw_d = pwsd.metrics.nw_hamming_metric(s1, s2, matrix=parasail.blosum62, open=3, extend=3)
+            nw_d = pwsd.metrics.nw_hamming_metric(s1, s2, matrix=parasail.blosum62, open=30, extend=30)
             str_d = pwsd.metrics.hamming_distance(s1, s2)
+            # print('%s\t%s\t%1.0f\t%1.0f' % (s1, s2, str_d, nw_d))
             self.assertTrue(nw_d == str_d)
 
     def test_multiprocessing_more(self):

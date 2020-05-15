@@ -27,7 +27,7 @@ def dict_from_matrix(mat):
     ----------
     mat : parasail substitution Matrix object
         Example is parasail.blosum62"""
-    d = {(aa1, aa2):mat.matrix[parasail_aa_alphabet.index(aa1), parasail_aa_alphabet.index(aa2)] for aa1, aa2 in itertools.combinations(parasail_aa_alphabet, 2)}
+    d = {(aa1, aa2):mat.matrix[parasail_aa_alphabet.index(aa1), parasail_aa_alphabet.index(aa2)] for aa1, aa2 in itertools.product(parasail_aa_alphabet, parasail_aa_alphabet)}
     d.update({'na':mat.matrix[-1, 0]})
     return d
 

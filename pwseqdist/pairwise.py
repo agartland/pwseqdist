@@ -25,7 +25,7 @@ Add a numb-compiled version of pairwise_sq and pairwise_rect
 
 def _mati2veci(i, j, n):
     veci = scipy.special.comb(n, 2) - scipy.special.comb(n - i, 2) + (j - i - 1)
-    return veci
+    return int(veci)
 
 def apply_pairwise_sq(seqs, metric, ncpus=1, **kwargs):
     """Calculate distance between all pairs of seqs using metric
@@ -105,7 +105,7 @@ def apply_pairwise_sq(seqs, metric, ncpus=1, **kwargs):
     if translate:
         """Then translate the vector form of the useqs to the vector
         form of the seqs"""
-        vout = np.zeros(scipy.special.comb(len(seqs), 2))
+        vout = np.zeros(int(scipy.special.comb(len(seqs), 2)))
         for veci, (i,j), in enumerate(itertools.combinations(range(len(seqs)), 2)):
             ui = useqs.index(seqs[i])
             uj = useqs.index(seqs[j])

@@ -73,6 +73,15 @@ class TestDistances(unittest.TestCase):
         dmat = squareform(dvec)
         self.assertTrue(dmat.shape[0] == 10 and dmat.shape[1] == 10)
 
+    def test_pw_sq_nonuniq(self):
+        dvec = pwsd.apply_pairwise_sq(seqs[:10], pwsd.metrics.hamming_distance, ncpus=1)
+        dmat = squareform(dvec)
+
+        dvec2 = pwsd.apply_pairwise_sq(seqs[:10] + seqs[:10], pwsd.metrics.hamming_distance, ncpus=1)
+        dmat2 = squareform(dvec2)
+
+        self.assertTrue(np.all(dmat2[:10, :][:, :10] == dmat))
+
     def test_multiprocessing(self):
         dvec = pwsd.apply_pairwise_sq(seqs[:10], pwsd.metrics.hamming_distance, ncpus=1)
         dvec_multi = pwsd.apply_pairwise_sq(seqs[:10], pwsd.metrics.hamming_distance, ncpus=2)

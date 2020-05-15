@@ -68,29 +68,6 @@ class TestDistances(unittest.TestCase):
         self.assertTrue(pwsd.metrics.hamming_distance(seqs[0], seqs[1]) == 4)
         self.assertTrue(pwsd.metrics.hamming_distance(seqs[0], seqs[0]) == 0)
 
-    def test_pw_sq(self):
-        dvec = pwsd.apply_pairwise_sq(seqs[:10], pwsd.metrics.hamming_distance, ncpus=1)
-        dmat = squareform(dvec)
-        self.assertTrue(dmat.shape[0] == 10 and dmat.shape[1] == 10)
-
-    def test_pw_sq_nonuniq(self):
-        dvec = pwsd.apply_pairwise_sq(seqs[:10], pwsd.metrics.hamming_distance, ncpus=1)
-        dmat = squareform(dvec)
-
-        dvec2 = pwsd.apply_pairwise_sq(seqs[:10] + seqs[:10], pwsd.metrics.hamming_distance, ncpus=1)
-        dmat2 = squareform(dvec2)
-
-        self.assertTrue(np.all(dmat2[:10, :][:, :10] == dmat))
-
-    def test_multiprocessing(self):
-        dvec = pwsd.apply_pairwise_sq(seqs[:10], pwsd.metrics.hamming_distance, ncpus=1)
-        dvec_multi = pwsd.apply_pairwise_sq(seqs[:10], pwsd.metrics.hamming_distance, ncpus=2)
-        self.assertTrue(np.all(dvec == dvec_multi))
-
-    def test_pw_rect(self):
-        indices, dvec = pwsd.apply_pairwise_rect(seqs[:10], seqs[:20], pwsd.metrics.hamming_distance, ncpus=1)
-        self.assertTrue(dvec.shape[0] == 200)
-
     def test_subst(self):
         subst_dict = pwsd.matrices.dict_from_matrix(parasail.blosum62)
         for s1, s2 in zip(seqs[-10:], seqs[:10]):
@@ -120,10 +97,54 @@ class TestDistances(unittest.TestCase):
             # print('%s\t%s\t%1.0f\t%1.0f' % (s1, s2, str_d, nw_d))
             self.assertTrue(nw_d == str_d)
 
+class TestApply(unittest.TestCase):
+    def test_pw_sq(self):
+        dvec = pwsd.apply_pairwise_sq(seqs[:10], pwsd.metrics.hamming_distance, ncpus=1)
+        dmat = squareform(dvec)
+        self.assertTrue(dmat.shape[0] == 10 and dmat.shape[1] == 10)
+    def test_pw_sq_subst(self):
+        subst_dict = pwsd.matrices.dict_from_matrix(parasail.blosum62)
+        dvec = pwsd.apply_pairwise_sq(seqs[:10], pwsd.metrics.str_subst_metric,  subst_dict=subst_dict, ncpus=1)
+        dmat = squareform(dvec)
+        self.assertTrue(dmat.shape[0] == 10 and dmat.shape[1] == 10)
+
+    def test_pw_sq_nonuniq(self):
+        dvec = pwsd.apply_pairwise_sq(seqs[:10], pwsd.metrics.hamming_distance, ncpus=1)
+        dmat = squareform(dvec)
+
+        dvec2 = pwsd.apply_pairwise_sq(seqs[:10] + seqs[:10], pwsd.metrics.hamming_distance, ncpus=1)
+        dmat2 = squareform(dvec2)
+
+        self.assertTrue(np.all(dmat2[:10, :][:, :10] == dmat))
+
+    def test_multiprocessing(self):
+        dvec = pwsd.apply_pairwise_sq(seqs[:10], pwsd.metrics.hamming_distance, ncpus=1)
+        dvec_multi = pwsd.apply_pairwise_sq(seqs[:10], pwsd.metrics.hamming_distance, ncpus=2)
+        self.assertTrue(np.all(dvec == dvec_multi))
+
+    def test_pw_rect(self):
+        indices, dvec = pwsd.apply_pairwise_rect(seqs[:10], seqs[:20], pwsd.metrics.hamming_distance, ncpus=1)
+        self.assertTrue(dvec.shape[0] == 200)
+
     def test_multiprocessing_more(self):
         dvec_multi = pwsd.apply_pairwise_sq(mixed_seqs, pwsd.metrics.nw_metric, ncpus=2)
         dvec = pwsd.apply_pairwise_sq(mixed_seqs, pwsd.metrics.nw_metric, ncpus=1)
         self.assertTrue(np.all(dvec == dvec_multi)) 
+
+class TestNumba(unittest.TestCase):
+    def test_nb_pw_sq_hamming(self):
+        dvec = pwsd.apply_pairwise_sq(seqs[:10], pwsd.metrics.hamming_distance, ncpus=1)
+        dvec_nb = pwsd.numba_tools.nb_pairwise_sq(seqs[:10], pwsd.numba_tools.nb_hamming_distance)
+        self.assertTrue(np.all(dvec == dvec_nb))
+
+    def test_nb_pw_sq(self):
+        subst_dict = pwsd.matrices.dict_from_matrix(parasail.blosum62)
+        dvec = pwsd.apply_pairwise_sq(seqs[:10], pwsd.metrics.str_subst_metric, subst_dict=subst_dict, ncpus=1)
+
+        subst_dict = pwsd.numba_tools.nb_dict_from_matrix(parasail.blosum62)
+        dvec_nb = pwsd.numba_tools.nb_pairwise_sq(seqs[:10], pwsd.numba_tools.nb_subst_metric, subst_dict)
+        self.assertTrue(np.all(dvec == dvec_nb))
+
 
 if __name__ == '__main__':
     unittest.main()

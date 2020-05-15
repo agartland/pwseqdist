@@ -148,7 +148,7 @@ def apply_pairwise_rect(seqs1, seqs2, metric, ncpus=1, **kwargs):
 
     def _recti2veci(i, j, n2):
         """Translate from rectangle coordinates to vector coordinates"""
-        return i * len(n2) + j
+        return int(i * len(n2) + j)
 
     useqs1 = list(set(seqs1))
     if len(useqs1) == len(seqs1):

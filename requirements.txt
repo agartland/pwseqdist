@@ -1,2 +1,8 @@
+pandas=1.0.0
 parmap==1.5.2
 parasail==1.1.17
+numpy
+scipy
+multiprocessing
+pytest
+unittest

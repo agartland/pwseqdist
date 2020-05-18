@@ -9,12 +9,12 @@ metrics.
 ## Install
 
 ```
-pip install pwdistseq
+pip install pwseqdist
 ```
 
 ## Example
 
-```
+```python
 import pwseqdist as pw
 import multiprocessing
 from scipy.spatial.distance import squareform
@@ -23,9 +23,9 @@ peptides = ['CACADLGAYPDKLIF','CACDALLAYTDKLIF',
             'CACDAVGDTLDKLIF','CACDDVTEVEGDKLIF',
             'CACDFISPSNWGIQSGRNTDKLIF','CACDPVLGDTRLTDKLIF']
 
-dvec = pw.apply_pairwise_sq(seqs   = peptides, 
-							metric = pw.metrics.nw_hamming_metric, 
-							ncpus  = multiprocessing.cpu_count()   )
+dvec = pw.apply_pairwise_sq(seqs = peptides, 
+	metric = pw.metrics.nw_hamming_metric, 
+	ncpus  = multiprocessing.cpu_count() )
 
 dmat = squareform(dvec).astype(int)
 dmat

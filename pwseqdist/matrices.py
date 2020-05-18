@@ -72,7 +72,7 @@ def seq2vec(seq, alphabet = parasail_aa_alphabet_with_unknown ):
             vec[aai] =alphabet.index(aa)
         except ValueError("Unknown symbols given value for last column/row of matrix"):
             """Unknown symbols given value for last column/row of matrix"""
-            vec[aai] = len(parasail_aa_alphabet)
+            vec[aai] = len(alphabet)
     return vec
 
 def vec2seq(vec, alphabet = parasail_aa_alphabet_with_unknown  ):

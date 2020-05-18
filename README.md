@@ -24,8 +24,8 @@ peptides = ['CACADLGAYPDKLIF','CACDALLAYTDKLIF',
             'CACDFISPSNWGIQSGRNTDKLIF','CACDPVLGDTRLTDKLIF']
 
 dvec = pw.apply_pairwise_sq(seqs = peptides, 
-	metric = pw.metrics.nw_hamming_metric, 
-	ncpus  = multiprocessing.cpu_count() )
+							metric = pw.metrics.nw_hamming_metric, 
+							ncpus  = multiprocessing.cpu_count() )
 
 dmat = squareform(dvec).astype(int)
 dmat

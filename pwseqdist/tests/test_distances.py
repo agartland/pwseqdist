@@ -6,7 +6,7 @@ import unittest
 import numpy as np
 from scipy.spatial.distance import squareform
 import parasail
-
+import pytest
 import pwseqdist as pwsd
 
 mixed_seqs = ['CACADLGAYPDKLIF',
@@ -170,19 +170,6 @@ class TestApply(unittest.TestCase):
         dvec = pwsd.apply_pairwise_sq(mixed_seqs, pwsd.metrics.nw_metric, matrix='blosum62', ncpus=1)
         self.assertTrue(np.all(dvec == dvec_multi)) 
 
-class TestNumba(unittest.TestCase):
-    def test_nb_pw_sq_hamming(self):
-        dvec = pwsd.apply_pairwise_sq(seqs[:10], pwsd.metrics.hamming_distance, ncpus=1)
-        dvec_nb = pwsd.numba_tools.nb_pairwise_sq(seqs[:10], pwsd.numba_tools.nb_hamming_distance)
-        self.assertTrue(np.all(dvec == dvec_nb))
-
-    def test_nb_pw_sq(self):
-        subst_dict = pwsd.matrices.dict_from_matrix(parasail.blosum62)
-        dvec = pwsd.apply_pairwise_sq(seqs[:10], pwsd.metrics.str_subst_metric, subst_dict=subst_dict, ncpus=1)
-
-        subst_dict = pwsd.numba_tools.nb_dict_from_matrix(parasail.blosum62)
-        dvec_nb = pwsd.numba_tools.nb_pairwise_sq(seqs[:10], pwsd.numba_tools.nb_subst_metric, subst_dict)
-        self.assertTrue(np.all(dvec == dvec_nb))
 
 
 if __name__ == '__main__':

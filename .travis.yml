@@ -6,5 +6,10 @@ python:
 install:
   - if [[ $TRAVIS_PYTHON_VERSION == '3.6' ]]; then travis_retry pip install -r requirements36.txt; fi
   - if [[ $TRAVIS_PYTHON_VERSION == '3.7' ]]; then travis_retry pip install -r requirements37.txt; fi
+  - pip install pytest-cov
+  - pip install coveralls
 script:
   - pytest
+  - pytest --cov=pwseqdist/
+after_success:
+  - coveralls

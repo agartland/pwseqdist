@@ -1,6 +1,8 @@
 # pwseqdist
 
 [![Build Status](https://travis-ci.com/kmayerb/pwseqdist.svg?branch=master)](https://travis-ci.com/kmayerb/pwseqdist)
+[![PyPI version](https://badge.fury.io/py/pwseqdist.svg)](https://badge.fury.io/py/pwseqdist)
+[![Coverage Status](https://coveralls.io/repos/github/agartland/pwseqdist/badge.svg?branch=master)](https://coveralls.io/github/agartland/pwseqdist?branch=master)
 
 A small package that efficiently computes distances between protein sequences.
 Can accommodate similarity matrices, sequences of different lengths and custom

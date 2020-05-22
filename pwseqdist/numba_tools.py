@@ -27,6 +27,14 @@ def nb_dict_from_matrix(subst):
         subst_dict[key] = v
     return subst_dict
 
+@numba.jit(nopython=True, parallel=False)
+def distance_vec(dvec, indices, seqs, nb_metric, *args):
+    for veci in numba.prange(len(indices)):
+        si = seqs[indices[veci, 0]]
+        sj = seqs[indices[veci, 1]]
+        d = nb_metric(si, sj, *args)
+        dvec[veci] = d
+
 def nb_pairwise_sq(seqs, nb_metric, *args):
     """Calculate distance between all pairs of seqs using metric
     and kwargs provided to nb_metric. Will use multiprocessing Pool
@@ -57,14 +65,6 @@ def nb_pairwise_sq(seqs, nb_metric, *args):
     indices = np.zeros((int(scipy.special.comb(len(seqs), 2)), 2), dtype=np.int)
     for veci, ij in enumerate(itertools.combinations(range(len(seqs)), 2)):
         indices[veci, :] = ij
-
-    @numba.jit(nopython=True, parallel=False)
-    def distance_vec(dvec, indices, seqs, nb_metric, *args):
-        for veci in numba.prange(len(indices)):
-            si = seqs[indices[veci, 0]]
-            sj = seqs[indices[veci, 1]]
-            d = nb_metric(si, sj, *args)
-            dvec[veci] = d
 
     distance_vec(dvec, indices, nb_seqs, nb_metric, *args)
     return dvec

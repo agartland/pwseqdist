@@ -34,7 +34,8 @@ install_reqs = [
       'parasail>=1.1.17',
       'parmap>=1.5.2',
       'pytest>=5.0.0',
-      'scipy>=1.2.1']
+      'scipy>=1.2.1',
+      'numba']
 
 if __name__ == "__main__":
       setup(**opts, install_requires=install_reqs)

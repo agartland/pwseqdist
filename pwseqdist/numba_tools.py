@@ -1,6 +1,7 @@
 import numpy as np
 import scipy.special
 import itertools
+import numba
 
 from .matrices import dict_from_matrix
 

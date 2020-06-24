@@ -37,7 +37,7 @@ def _mati2veci(i, j, n):
     veci = scipy.special.comb(n, 2) - scipy.special.comb(n - i, 2) + (j - i - 1)
     return int(veci)
 
-def apply_pairwise_sq(seqs, metric, ncpus=1, use_numba=False, uniqify=True, *args):
+def apply_pairwise_sq(seqs, metric, ncpus=1, use_numba=False, uniqify=True, *numba_args, **kwargs):
     """Calculate distance between all pairs of seqs using metric
     and kwargs provided to metric. Will use multiprocessing Pool
     if ncpus > 1.
@@ -64,8 +64,12 @@ def apply_pairwise_sq(seqs, metric, ncpus=1, use_numba=False, uniqify=True, *arg
         has been compiled with parallel=True.
     uniqify : bool
         Indicates whether only unique sequences should be analyzed.
-    *args : keyword arguments
+    **kwargs : keyword arguments
         Additional keyword arguments are supplied to the metric.
+        Kwargs are not provided to numba-compiled metrics; use numba_args.
+    *numba_args : non-keyword arguments
+        These are provided to numba-compiled metrics which do not
+        accept kwargs. Use kwargs for non-numba metrics.
 
     Returns
     -------
@@ -86,7 +90,7 @@ def apply_pairwise_sq(seqs, metric, ncpus=1, use_numba=False, uniqify=True, *arg
 
     if not use_numba:
         chunk_func = lambda l, n: [l[i:i + n] for i in range(0, len(l), n)]
-        chunksz = len(pw_indices) // ncpus
+        chunksz = max(len(pw_indices) // ncpus, 1)
         chunked_indices = chunk_func(pw_indices, chunksz)
         dtype = type(metric(useqs[0], useqs[0], **kwargs))
 
@@ -129,7 +133,7 @@ def apply_pairwise_sq(seqs, metric, ncpus=1, use_numba=False, uniqify=True, *arg
     else:
         pw_indices = np.array(pw_indices, dtype=np.int64)
         seqs_mat, seqs_L = seqs2mat(useqs)
-        uvec = nb_distance_vec(seqs_mat, seqs_L, pw_indices, metric, *args)
+        uvec = nb_distance_vec(seqs_mat, seqs_L, pw_indices, metric, *numba_args)
     
     """Create translation dict from vector_i to mat_ij coordinates for the
     distance matrix of unique seqs (unneccessary, but may be useful later)"""
@@ -152,7 +156,7 @@ def apply_pairwise_sq(seqs, metric, ncpus=1, use_numba=False, uniqify=True, *arg
         vout = uvec
     return vout
 
-def apply_pairwise_rect(seqs1, seqs2, metric, ncpus=1, use_numba=False, uniqify=True, *args):
+def apply_pairwise_rect(seqs1, seqs2, metric, ncpus=1, use_numba=False, uniqify=True, *numba_args, **kwargs):
     """Calculate distance between pairs of sequences in seqs1
     with sequences in seqs2 using metric and kwargs provided to
     metric. Will use multiprocessing Pool if ncpus > 1.
@@ -181,6 +185,10 @@ def apply_pairwise_rect(seqs1, seqs2, metric, ncpus=1, use_numba=False, uniqify=
         Indicates whether only unique sequences should be analyzed.
     **kwargs : keyword arguments
         Additional keyword arguments are supplied to the metric.
+        Kwargs are not provided to numba-compiled metrics; use numba_args.
+    *numba_args : non-keyword arguments
+        These are provided to numba-compiled metrics which do not
+        accept kwargs. Use kwargs for non-numba metrics.
 
     Returns
     -------
@@ -254,7 +262,7 @@ def apply_pairwise_rect(seqs1, seqs2, metric, ncpus=1, use_numba=False, uniqify=
         pw_indices = np.array(pw_indices, dtype=np.int64)
         seqs_mat1, seqs_L1 = seqs2mat(useqs1)
         seqs_mat2, seqs_L2 = seqs2mat(useqs2)
-        urect = nb_distance_rect(seqs_mat1, seqs_L1, seqs_mat2, seqs_L2, pw_indices, metric, *args).reshape((len(useqs1), len(useqs2)))
+        urect = nb_distance_rect(seqs_mat1, seqs_L1, seqs_mat2, seqs_L2, pw_indices, metric, *numba_args).reshape((len(useqs1), len(useqs2)))
     if translate1:
         redup_ind = [useqs1.index(s) for s in seqs1]
         urect = urect[redup_ind, :]

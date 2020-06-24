@@ -74,6 +74,14 @@ def nb_distance_rect(seqs_mat1, seqs_L1, seqs_mat2, seqs_L2, indices, nb_metric,
     return dist
 
 @nb.jit(nopython=True)
+def nb_hamming_distance(vec1, vec2):
+    tot = 0
+    for i in range(vec1.shape[0]):
+        if vec1[i] != vec2[i]:
+            tot += 1
+    return tot
+
+@nb.jit(nopython=True)
 def nb_editdistance(seq_vec1, seq_vec2, distance_matrix=default_distance_matrix, gap_penalty=1):
     """Computes the Levenshtein edit distance between two sequences, with the AA substitution
     distances provided in distance_matrix.

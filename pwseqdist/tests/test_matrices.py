@@ -43,17 +43,18 @@ def test_vec2seq_out_of_range_alph24():
 	with pytest.raises(ValueError) as ex:
 		pwsd.matrices.vec2seq([ 4,  0, 24], alphabet = pwsd.matrices.parasail_aa_alphabet_with_unknown )
 	print(ex.value)
-	assert str(ex.value) == 'vex2seq only works with integers 0 to 23 corresponding with ARNDCQEGHILKMFPSTWYVBZX*'
+	assert str(ex.value) == 'vec2seq only works with integers 0 to 23 corresponding with ARNDCQEGHILKMFPSTWYVBZX*'
 
 def test_vec2seq_out_of_range_alph23():
 	with pytest.raises(ValueError) as ex:
 		pwsd.matrices.vec2seq([ 4,  0, 23], alphabet = pwsd.matrices.parasail_aa_alphabet )
 	print(ex.value)
-	assert str(ex.value) == 'vex2seq only works with integers 0 to 22 corresponding with ARNDCQEGHILKMFPSTWYVBZX'
+	assert str(ex.value) == 'vec2seq only works with integers 0 to 22 corresponding with ARNDCQEGHILKMFPSTWYVBZX'
 
 
 def test_seqs2mat():
-	assert np.all(pwsd.matrices.seqs2mat(["CAT","HAT"]) == np.array([[ 4,  0, 16],[ 8,  0, 16]]))
+	assert np.all(pwsd.matrices.seqs2mat(["CAT","HAT"])[0] == np.array([[ 4,  0, 16],[ 8,  0, 16]]))
+	assert np.all(pwsd.matrices.seqs2mat(["CAT","HAT"])[1] == np.array([3, 3]))
     
 def test_mat2seqs():
 	assert np.all(pwsd.matrices.mat2seqs(np.array([[ 4,  0, 16],[ 8,  0, 16]]) ) == ['CAT', 'HAT'])

@@ -1,13 +1,15 @@
 import parasail
 import numpy as np
 import operator
+from .numba_tools import nb_editdistance
 
 __all__ = ['compute_many',
            'compute_many_rect',
            'nw_metric',
            'nw_hamming_metric',
            'np_subst_metric',
-           'str_subst_metric']
+           'str_subst_metric',
+           'nb_editdistance']
 
 def compute_many(indices, metric, seqs, dtype, **kwargs):
     return  np.array([metric(seqs[i], seqs[j], **kwargs) for i,j in indices], dtype=dtype)

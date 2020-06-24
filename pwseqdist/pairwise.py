@@ -5,6 +5,8 @@ import numpy as np
 import scipy
 
 from .metrics import compute_many, compute_many_rect
+from .numba_tools import *
+from .matrices import seqs2mat
 
 __all__ = ['apply_pairwise_sq',
            'apply_pairwise_rect']
@@ -35,7 +37,7 @@ def _mati2veci(i, j, n):
     veci = scipy.special.comb(n, 2) - scipy.special.comb(n - i, 2) + (j - i - 1)
     return int(veci)
 
-def apply_pairwise_sq(seqs, metric, ncpus=1, **kwargs):
+def apply_pairwise_sq(seqs, metric, ncpus=1, use_numba=False, uniqify=True, *args):
     """Calculate distance between all pairs of seqs using metric
     and kwargs provided to metric. Will use multiprocessing Pool
     if ncpus > 1.
@@ -56,7 +58,13 @@ def apply_pairwise_sq(seqs, metric, ncpus=1, **kwargs):
         func(seq1, seq2, **kwargs)
     ncpus : int
         Size of the worker pool to be used by multiprocessing
-    **kwargs : keyword arguments
+    use_numba : bool
+        Use a numba-compiled outer loop and distance metric.
+        For numba, ncpus is ignored because the "outer" loop
+        has been compiled with parallel=True.
+    uniqify : bool
+        Indicates whether only unique sequences should be analyzed.
+    *args : keyword arguments
         Additional keyword arguments are supplied to the metric.
 
     Returns
@@ -65,8 +73,6 @@ def apply_pairwise_sq(seqs, metric, ncpus=1, **kwargs):
         Vector form of the pairwise distance matrix.
         Use scipy.distance.squareform to convert to a square matrix"""
     """Set to false to turn on computation of redundant distances"""
-    uniqify=True
-
     useqs = list(set(seqs))
     if len(useqs) == len(seqs) or ~uniqify:
         useqs = seqs
@@ -78,52 +84,56 @@ def apply_pairwise_sq(seqs, metric, ncpus=1, **kwargs):
     as scipy.distance.pdist/squareform"""
     pw_indices = list(itertools.combinations(range(len(useqs)), 2))
 
-    chunk_func = lambda l, n: [l[i:i + n] for i in range(0, len(l), n)]
-    chunksz = len(pw_indices) // ncpus
-    chunked_indices = chunk_func(pw_indices, chunksz)
-    dtype = type(metric(useqs[0], useqs[0], **kwargs))
+    if not use_numba:
+        chunk_func = lambda l, n: [l[i:i + n] for i in range(0, len(l), n)]
+        chunksz = len(pw_indices) // ncpus
+        chunked_indices = chunk_func(pw_indices, chunksz)
+        dtype = type(metric(useqs[0], useqs[0], **kwargs))
 
-    if ncpus > 1:
-        with multiprocessing.Pool(ncpus) as pool:
-            try:
-                dists = parmap.map(compute_many,
-                                   chunked_indices,
-                                   metric,
-                                   useqs,
-                                   dtype,
-                                   **kwargs,
-                                   pm_parallel=True,
-                                   pm_pool=pool)
-            except ValueError as err:
-                print('pwseqdist.apply_pairwise_sq: error with metric %s and multiprocessing, trying on single core' % metric)
-                dists = parmap.map(compute_many,
+        if ncpus > 1:
+            with multiprocessing.Pool(ncpus) as pool:
+                try:
+                    dists = parmap.map(compute_many,
+                                       chunked_indices,
+                                       metric,
+                                       useqs,
+                                       dtype,
+                                       **kwargs,
+                                       pm_parallel=True,
+                                       pm_pool=pool)
+                except ValueError as err:
+                    print('pwseqdist.apply_pairwise_sq: error with metric %s and multiprocessing, trying on single core' % metric)
+                    dists = parmap.map(compute_many,
+                                       chunked_indices,
+                                       metric,
+                                       useqs,
+                                       dtype,
+                                       **kwargs,
+                                       pm_parallel=False)
+                    print('pwseqdist.apply_pairwise_sq: metric %s could not be spread to multiple processes, ran on single core' % metric)
+        else:
+            dists = parmap.map(compute_many,
                                    chunked_indices,
                                    metric,
                                    useqs,
                                    dtype,
                                    **kwargs,
                                    pm_parallel=False)
-                print('pwseqdist.apply_pairwise_sq: metric %s could not be spread to multiple processes, ran on single core' % metric)
+        """Get the vector form of the useqs"""
+        """n = len(useqs)
+        uvec = np.zeros(scipy.special.comb(n, 2))
+        for ichunk, dchunk in zip(chunked_indices, dists):
+            for (i,j), d in zip(ichunk, dchunk):
+                uvec[_mati2veci(i, j, n)] = d"""
+        uvec = np.concatenate(dists) # this may be more memory intensive, but should be fine
     else:
-        dists = parmap.map(compute_many,
-                               chunked_indices,
-                               metric,
-                               useqs,
-                               dtype,
-                               **kwargs,
-                               pm_parallel=False)
+        pw_indices = np.array(pw_indices, dtype=np.int64)
+        seqs_mat, seqs_L = seqs2mat(useqs)
+        uvec = nb_distance_vec(seqs_mat, seqs_L, pw_indices, metric, *args)
     
     """Create translation dict from vector_i to mat_ij coordinates for the
     distance matrix of unique seqs (unneccessary, but may be useful later)"""
     # uveci2umati = {veci:(i, j) for veci, (i, j) in enumerate(itertools.combinations(range(len(useqs)), 2))}
-
-    """Get the vector form of the useqs"""
-    """n = len(useqs)
-    uvec = np.zeros(scipy.special.comb(n, 2))
-    for ichunk, dchunk in zip(chunked_indices, dists):
-        for (i,j), d in zip(ichunk, dchunk):
-            uvec[_mati2veci(i, j, n)] = d"""
-    uvec = np.concatenate(dists) # this may be more memory intensive, but should be fine
     
     if translate:
         """Then translate the vector form of the useqs to the vector
@@ -142,7 +152,7 @@ def apply_pairwise_sq(seqs, metric, ncpus=1, **kwargs):
         vout = uvec
     return vout
 
-def apply_pairwise_rect(seqs1, seqs2, metric, ncpus=1, **kwargs):
+def apply_pairwise_rect(seqs1, seqs2, metric, ncpus=1, use_numba=False, uniqify=True, *args):
     """Calculate distance between pairs of sequences in seqs1
     with sequences in seqs2 using metric and kwargs provided to
     metric. Will use multiprocessing Pool if ncpus > 1.
@@ -163,6 +173,12 @@ def apply_pairwise_rect(seqs1, seqs2, metric, ncpus=1, **kwargs):
         func(seq1, seq2, **kwargs)
     ncpus : int
         Size of the worker pool to be used by multiprocessing
+    use_numba : bool
+        Use a numba-compiled outer loop and distance metric.
+        For numba, ncpus is ignored because the "outer" loop
+        has been compiled with parallel=True.
+    uniqify : bool
+        Indicates whether only unique sequences should be analyzed.
     **kwargs : keyword arguments
         Additional keyword arguments are supplied to the metric.
 
@@ -173,7 +189,7 @@ def apply_pairwise_rect(seqs1, seqs2, metric, ncpus=1, **kwargs):
     indices : np.ndarray, shape [len(seqs1) * len(seqs2), 2]
         Contains i,j indices on each row where i (j) is an index
         into seqs1 (seqs2) and can be used to recreate a distance rectangle"""
-    uniqify = True
+
     def _recti2veci(i, j, n2):
         """Translate from rectangle coordinates to vector coordinates"""
         return int(i * len(n2) + j)
@@ -195,26 +211,36 @@ def apply_pairwise_rect(seqs1, seqs2, metric, ncpus=1, **kwargs):
         useqs2 = list(seqs2)
 
     pw_indices = list(itertools.product(range(len(useqs1)), range(len(useqs2))))
-
-    chunk_func = lambda l, n: [l[i:i + n] for i in range(0, len(l), n)]
-    chunksz = len(pw_indices)//ncpus
-    chunked_indices = chunk_func(pw_indices, chunksz)
-    dtype = type(metric(useqs1[0], useqs2[0], **kwargs))
-    if ncpus > 1:
-        with multiprocessing.Pool(ncpus) as pool:
-            try:
-                dists = parmap.map(compute_many_rect,
-                                   chunked_indices,
-                                   metric,
-                                   useqs1,
-                                   useqs2,
-                                   dtype,
-                                   **kwargs,
-                                   pm_parallel=True,
-                                   pm_pool=pool)
-            except ValueError as err:
-                print('pwseqdist.apply_pairwise_rect: error with metric %s and multiprocessing, trying on single core' % metric)
-                dists = parmap.map(compute_many_rect,
+    if not use_numba:
+        chunk_func = lambda l, n: [l[i:i + n] for i in range(0, len(l), n)]
+        chunksz = len(pw_indices)//ncpus
+        chunked_indices = chunk_func(pw_indices, chunksz)
+        dtype = type(metric(useqs1[0], useqs2[0], **kwargs))
+        if ncpus > 1:
+            with multiprocessing.Pool(ncpus) as pool:
+                try:
+                    dists = parmap.map(compute_many_rect,
+                                       chunked_indices,
+                                       metric,
+                                       useqs1,
+                                       useqs2,
+                                       dtype,
+                                       **kwargs,
+                                       pm_parallel=True,
+                                       pm_pool=pool)
+                except ValueError as err:
+                    print('pwseqdist.apply_pairwise_rect: error with metric %s and multiprocessing, trying on single core' % metric)
+                    dists = parmap.map(compute_many_rect,
+                                       chunked_indices,
+                                       metric,
+                                       useqs1,
+                                       useqs2,
+                                       dtype,
+                                       **kwargs,
+                                       pm_parallel=False)
+                    print('pwseqdist.apply_pairwise_rect: metric %s could not be spread to multiple processes, ran on single core' % metric)
+        else:
+            dists = parmap.map(compute_many_rect,
                                    chunked_indices,
                                    metric,
                                    useqs1,
@@ -222,18 +248,13 @@ def apply_pairwise_rect(seqs1, seqs2, metric, ncpus=1, **kwargs):
                                    dtype,
                                    **kwargs,
                                    pm_parallel=False)
-                print('pwseqdist.apply_pairwise_rect: metric %s could not be spread to multiple processes, ran on single core' % metric)
+        
+        urect = np.concatenate(dists).reshape((len(useqs1), len(useqs2)))
     else:
-        dists = parmap.map(compute_many_rect,
-                               chunked_indices,
-                               metric,
-                               useqs1,
-                               useqs2,
-                               dtype,
-                               **kwargs,
-                               pm_parallel=False)
-    
-    urect = np.concatenate(dists).reshape((len(useqs1), len(useqs2)))
+        pw_indices = np.array(pw_indices, dtype=np.int64)
+        seqs_mat1, seqs_L1 = seqs2mat(useqs1)
+        seqs_mat2, seqs_L2 = seqs2mat(useqs2)
+        urect = nb_distance_rect(seqs_mat1, seqs_L1, seqs_mat2, seqs_L2, pw_indices, metric, *args).reshape((len(useqs1), len(useqs2)))
     if translate1:
         redup_ind = [useqs1.index(s) for s in seqs1]
         urect = urect[redup_ind, :]

@@ -1,11 +1,15 @@
 language: python
 python:
   - "3.6"
-  - "3.7"
-# command to install dependencies
+jobs:
+  include:
+    - name: "pandas 1.0.3"
+      env: PANDAS_VERSION=1.0.3
+    - name: "pandas 0.24.2"
+      env: PANDAS_VERSION=0.24.2
 install:
-  - if [[ $TRAVIS_PYTHON_VERSION == '3.6' ]]; then travis_retry pip install -r requirements36.txt; fi
-  - if [[ $TRAVIS_PYTHON_VERSION == '3.7' ]]; then travis_retry pip install -r requirements37.txt; fi
+  - travis_retry pip install -r requirements.txt
+  - pip install -q pandas==$PANDAS_VERSION
   - pip install pytest-cov
   - pip install coveralls
 script:

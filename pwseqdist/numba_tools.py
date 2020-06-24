@@ -130,39 +130,40 @@ def nb_editdistance(seq_vec1, seq_vec2, distance_matrix=default_distance_matrix,
                                  ldmat[row-1, col-1] + distance_matrix[seq_vec1[row-1], seq_vec2[col-1]]) # substitution
     return ldmat[row, col]
 
-def _nb_pairwise_sq(seqs, nb_metric, *args):
-    """Calculate distance between all pairs of seqs using metric
-    and kwargs provided to nb_metric. Will use multiprocessing Pool
-    if ncpus > 1.
+# def _nb_pairwise_sq(seqs, nb_metric, *args):
+#     """Calculate distance between all pairs of seqs using metric
+#     and kwargs provided to nb_metric. Will use multiprocessing Pool
+#     if ncpus > 1.
 
-    nb_metric must be a numba-compiled function
+#     nb_metric must be a numba-compiled function
 
-    Parameters
-    ----------
-    seqs : list
-        List of sequences provided to metric in pairs.
-    metric : numba-compiled function
-        A distance function of the form
-        func(seq1, seq2, **kwargs)
-    **kwargs : keyword arguments
-        Additional keyword arguments are supplied to the metric.
+#     Parameters
+#     ----------
+#     seqs : list
+#         List of sequences provided to metric in pairs.
+#     metric : numba-compiled function
+#         A distance function of the form
+#         func(seq1, seq2, **kwargs)
+#     **kwargs : keyword arguments
+#         Additional keyword arguments are supplied to the metric.
 
-    Returns
-    -------
-    dvec : np.ndarray, length n*(n - 1) / 2
-        Vector form of the pairwise distance matrix.
-        Use scipy.distance.squareform to convert to a square matrix"""
-    nb_seqs = nb.typed.List()
-    for s in seqs:
-        nb_seqs.append(s)
+#     Returns
+#     -------
+#     dvec : np.ndarray, length n*(n - 1) / 2
+#         Vector form of the pairwise distance matrix.
+#         Use scipy.distance.squareform to convert to a square matrix"""
+#     nb_seqs = nb.typed.List()
+#     for s in seqs:
+#         nb_seqs.append(s)
 
-    dvec = np.zeros(int(scipy.special.comb(len(seqs), 2)))
-    indices = np.zeros((int(scipy.special.comb(len(seqs), 2)), 2), dtype=np.int)
-    for veci, ij in enumerate(itertools.combinations(range(len(seqs)), 2)):
-        indices[veci, :] = ij
-
-    distance_vec(dvec, indices, nb_seqs, nb_metric, *args)
-    return dvec
+#     dvec = np.zeros(int(scipy.special.comb(len(seqs), 2)))
+#     indices = np.zeros((int(scipy.special.comb(len(seqs), 2)), 2), dtype=np.int)
+#     for veci, ij in enumerate(itertools.combinations(range(len(seqs)), 2)):
+#         indices[veci, :] = ij
+    
+#     #nb_distance_vec(dvec, seqs_L, indices, nb_metric, *args)
+#     distance_vec(dvec, indices, nb_seqs, nb_metric, *args)
+#     return dvec
 
 
 

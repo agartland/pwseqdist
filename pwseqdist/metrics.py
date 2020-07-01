@@ -1,15 +1,18 @@
 import parasail
 import numpy as np
 import operator
-from .numba_tools import nb_editdistance
+from .nb_metrics import nb_editdistance, nb_vector_editdistance, nb_tcrdist_distance, nb_vector_tcrdist_distance
 
 __all__ = ['compute_many',
            'compute_many_rect',
+           'str_subst_metric',
+           'hamming_distance',
            'nw_metric',
            'nw_hamming_metric',
-           'np_subst_metric',
-           'str_subst_metric',
-           'nb_editdistance']
+           'nb_editdistance',
+           'nb_vector_editdistance',
+           'nb_tcrdist_distance',
+           'nb_vector_tcrdist_distance']
 
 def compute_many(indices, metric, seqs, dtype, **kwargs):
     return  np.array([metric(seqs[i], seqs[j], **kwargs) for i,j in indices], dtype=dtype)
@@ -87,7 +90,7 @@ def hamming_distance(s1, s2):
     assert len(s1) == len(s2), "Inputs must have the same length."
     return np.sum([i for i in map(operator.__ne__, s1, s2)])
 
-def nw_metric(s1, s2, matrix='blosum62', open=3, extend=3):
+def nw_metric(s1, s2, matrix='blosum62', open=3, extend=3, return_similarity=False):
     """Function applying Parasail's Needleman-Wuncsh Algorithm to compute
     a distance between any two sequences.
 
@@ -123,11 +126,17 @@ def nw_metric(s1, s2, matrix='blosum62', open=3, extend=3):
     Bioinformatics, 19 (sup 1) 2003
     """
     p_matrix = getattr(parasail, matrix)
-    xx = parasail.nw_stats(s1, s1, open=open, extend=extend, matrix=p_matrix).score
-    yy = parasail.nw_stats(s2, s2, open=open, extend=extend, matrix=p_matrix).score
+
     xy = parasail.nw_stats(s1, s2, open=open, extend=extend, matrix=p_matrix).score
-    D = xx + yy - 2 * xy
-    return D
+    
+    if return_similarity:
+        return xy
+    else:
+        xx = parasail.nw_stats(s1, s1, open=open, extend=extend, matrix=p_matrix).score
+        yy = parasail.nw_stats(s2, s2, open=open, extend=extend, matrix=p_matrix).score
+        
+        D = xx + yy - 2 * xy
+        return D
 
 def nw_hamming_metric(s1, s2, matrix='blosum62', open=3, extend=3):
     """Function applying Parasail's Needleman-Wuncsh Algorithm to align and
@@ -163,7 +172,7 @@ def nw_hamming_metric(s1, s2, matrix='blosum62', open=3, extend=3):
     D = len(xy_t.traceback.comp)-xy.matches
     return D
 
-def np_subst_metric(seq1, seq2, subst_mat, as_similarity=False):
+def _np_subst_metric(seq1, seq2, subst_mat, as_similarity=False):
     """Numpy version of str_subst_metric, however it is not yet compatible with
     apply_pairwise_sq because of the need to convert strings to vectors of integers.
     It may not be faster than the string version, so there is no plan to further develop."""

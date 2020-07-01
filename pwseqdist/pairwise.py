@@ -9,29 +9,18 @@ from .numba_tools import *
 from .matrices import seqs2mat
 
 __all__ = ['apply_pairwise_sq',
-           'apply_pairwise_rect']
+           'apply_pairwise_rect',
+           'apply_pairwise_sparse']
 
 """TODO:
 Currently I pass all the sequences and some set of indices to compute_many. 
-Why wouldn't I just send the some of the sequences?
+Why wouldn't I just send some of the sequences?
 The point was to avoid sending all the pairs of sequences and just send
 pairs of indices to the workers. So we'd have to be smart about reducing the
 total number of sequences that are needed and then sending just those and
 translated indices.
 
-
-These functions are currently not compatible with the numpy subst_metric
-because the seqs input woudl be provided as a numpy matric of integers.
-I'm not even sure the numpy metric will be faster so not adding now.
-
-Add a numb-compiled version of pairwise_sq and pairwise_rect
-  - Convert metrics to code that can be compile with numba
-    This would allow the "outer" loop performing pairwise
-    distances to also be compiled using numba. The advantage
-    is that numba-compiled code can use multithreading to run
-    on multiple CPUs, and making use of shared memory.
-
-    I think this could allow for very fast distance calculations"""
+"""
 
 def _mati2veci(i, j, n):
     veci = scipy.special.comb(n, 2) - scipy.special.comb(n - i, 2) + (j - i - 1)
@@ -269,4 +258,91 @@ def apply_pairwise_rect(seqs1, seqs2, metric, ncpus=1, use_numba=False, uniqify=
     if translate2:
         redup_ind = [useqs2.index(s) for s in seqs2]
         urect = urect[:, redup_ind]
+    return urect
+
+
+def apply_pairwise_sparse(seqs, pairs, metric, ncpus=1, use_numba=False, *numba_args, **kwargs):
+    """Calculate distance between pairs of sequences in seqs using metric and kwargs
+    provided to metric. Will only compute distances specified in pairs of indices in pairs.
+    Results could be used to create a sparse matrix of pairwise distances.
+
+    Will use multiprocessing Pool if ncpus > 1.
+
+    Though written to be used for distance calculations,
+    it is general enough that it could be used to run
+    any arbitrary function on pairs of elements in seqs (iterable).
+
+    Parameters
+    ----------
+    seqs : list or indexable iterable
+        List of sequences.
+    pairs : iterable
+        List or iterable of length 2 tuples/lists, where each length 2 list
+        is a pair of integer positional indices into seqs.
+    metric : function
+        A distance function of the form
+        func(seq1, seq2, **kwargs)
+    ncpus : int
+        Size of the worker pool to be used by multiprocessing
+    use_numba : bool
+        Use a numba-compiled outer loop and distance metric.
+        For numba, ncpus is ignored because the "outer" loop
+        has been compiled with parallel=True.
+    **kwargs : keyword arguments
+        Additional keyword arguments are supplied to the metric.
+        Kwargs are not provided to numba-compiled metrics; use numba_args.
+    *numba_args : non-keyword arguments
+        These are provided to numba-compiled metrics which do not
+        accept kwargs. Use kwargs for non-numba metrics.
+
+    Returns
+    -------
+    dvec : np.ndarray, length len(pairs)
+        Vector of distances for each pair of indices in pairs"""
+    
+    if not use_numba:
+        chunk_func = lambda l, n: [l[i:i + n] for i in range(0, len(l), n)]
+        chunksz = len(pairs)//ncpus
+        chunked_indices = chunk_func(pairs, chunksz)
+        dtype = type(metric(seqs[0], seqs[0], **kwargs))
+
+        """compute_many(indices, metric, seqs, dtype, **kwargs)"""
+
+        if ncpus > 1:
+            with multiprocessing.Pool(ncpus) as pool:
+                try:
+                    dists = parmap.map(compute_many,
+                                       chunked_indices,
+                                       metric,
+                                       seqs,
+                                       dtype,
+                                       **kwargs,
+                                       pm_parallel=True,
+                                       pm_pool=pool)
+                except ValueError as err:
+                    print('pwseqdist.apply_pairwise_sparse: error with metric %s and multiprocessing, trying on single core' % metric)
+                    dists = parmap.map(compute_many,
+                                       chunked_indices,
+                                       metric,
+                                       seqs,
+                                       dtype,
+                                       **kwargs,
+                                       pm_parallel=False)
+                    print('pwseqdist.apply_pairwise_sparse: metric %s could not be spread to multiple processes, ran on single core' % metric)
+        else:
+            dists = parmap.map(compute_many,
+                                   chunked_indices,
+                                   metric,
+                                   seqs,
+                                   dtype,
+                                   **kwargs,
+                                   pm_parallel=False)
+        
+        vec = np.concatenate(dists)
+    else:
+        """nb_distance_vec(seqs_mat, seqs_L, indices, nb_metric, *args)"""
+        pw_indices = np.array(pairs, dtype=np.int64)
+        seqs_mat, seqs_L = seqs2mat(seqs)
+        vec = nb_distance_vec(seqs_mat, seqs_L, pw_indices, metric, *numba_args)
+
     return urect

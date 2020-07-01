@@ -1,7 +1,7 @@
 import parasail
 import numpy as np
 import operator
-from .nb_metrics import nb_editdistance, nb_vector_editdistance, nb_tcrdist_distance, nb_vector_tcrdist_distance
+from .nb_metrics import nb_editdistance, nb_vector_editdistance, nb_tcrdist_distance, nb_vector_tcrdist_distance, nb_hamming_distance
 
 __all__ = ['compute_many',
            'compute_many_rect',
@@ -9,6 +9,7 @@ __all__ = ['compute_many',
            'hamming_distance',
            'nw_metric',
            'nw_hamming_metric',
+           'nb_hamming_distance',
            'nb_editdistance',
            'nb_vector_editdistance',
            'nb_tcrdist_distance',
@@ -72,7 +73,7 @@ def str_subst_metric(seq1, seq2, subst_dict, as_similarity=False, na_penalty=Non
         D = sim11 + sim22 - 2 * sim12
         return D
 
-def hamming_distance(s1, s2):
+def hamming_distance(s1, s2, check_lengths=False):
     """Hamming distance between str1 and str2.
     Requires that str1 and sr2 are equal length
 
@@ -87,7 +88,8 @@ def hamming_distance(s1, s2):
     -------
     D : float
         distance between strings (Hamming Distance: number of mismatched positions)"""
-    assert len(s1) == len(s2), "Inputs must have the same length."
+    if check_lengths:
+        assert len(s1) == len(s2), "Inputs must have the same length."
     return np.sum([i for i in map(operator.__ne__, s1, s2)])
 
 def nw_metric(s1, s2, matrix='blosum62', open=3, extend=3, return_similarity=False):

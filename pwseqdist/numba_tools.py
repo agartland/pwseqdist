@@ -8,7 +8,7 @@ __all__ = ['nb_distance_vec']
 
 
 @nb.jit(nopython=True, parallel=False, nogil=True)
-def nb_distance_vec(seqs_mat, seqs_L, indices, nb_metric, *args):
+def nb_distance_vec(indices, seqs_mat, seqs_L, nb_metric, *args):
     """Compute distances between pairs of sequences in seqs_mat specified by indices.
 
     Note: numba raised errors when this function tried to use *args inside the prange
@@ -20,14 +20,14 @@ def nb_distance_vec(seqs_mat, seqs_L, indices, nb_metric, *args):
 
     Parameters
     ----------
+    indices : np.ndarray [nseqs, 2]
+        Indices into seqs_mat indicating pairs of sequences to compare.
     seqs_mat : np.ndarray dtype=int16 [nseqs, seq_length]
         Created by pwsd.seqs2mat with padding to accomodate
         sequences of different lengths (-1 padding)
     seqs_L : np.ndarray [nseqs]
         A vector containing the length of each sequence,
         without the padding in seqs_mat
-    indices : np.ndarray [nseqs, 2]
-        Indices into seqs_mat indicating pairs of sequences to compare.
     nb_metric : nb.jitt'ed function
         Any function that has been numba-compiled, taking
         two numpy vector representations of sequences and *args"""

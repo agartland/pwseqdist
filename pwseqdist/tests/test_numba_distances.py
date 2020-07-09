@@ -1,6 +1,6 @@
 import sys
 import unittest
-import pytest
+# import pytest
 import numpy as np
 import parasail
 import timeit
@@ -14,13 +14,13 @@ import stringdist
 
 from fg_shared import *
 
-sys.path.append(opj(_git, 'pwseqdist'))
+# sys.path.append(opj(_git, 'pwseqdist'))
 import pwseqdist as pwsd
 
 mixed_seqs = ['CACADLGAYPDKLIF',
-             'CACDALLAYTDKLIF',
-             'CACDAVGDTLDKLIF',
-             'CACDDVTEVEGDKLIF',
+             'CACADLGARPDKLIF',
+             'CACADLGAAYPDKLIF',
+             'CACADLGAYPDRLIF',
              'CACDFISPSNWGIQSGRNTDKLIF',
              'CACDILLGDTADKLIF',
              'CACDIVLSGGLDTRQMFF',
@@ -70,89 +70,112 @@ mixed_seqs = ['CACADLGAYPDKLIF',
 
 seqs = [s[:10] for s in mixed_seqs]
 
-def test_nb_pw_sq_hamming():
-    dvec = pwsd.apply_pairwise_sq(mixed_seqs, pwsd.metrics.nb_editdistance, use_numba=True)
-    assert dvec.shape[0] == (len(mixed_seqs)**2 - len(mixed_seqs)) / 2
-
 def test_nb_pw_rect():
-    drect = pwsd.apply_pairwise_rect(mixed_seqs[:2], mixed_seqs, pwsd.metrics.nb_editdistance, use_numba=True)
+    drect = pwsd.apply_pairwise_rect(pwsd.metrics.nb_vector_editdistance, mixed_seqs[:2], mixed_seqs, use_numba=True)
     assert drect.shape[0] == 2
     assert drect.shape[1] == len(mixed_seqs)
 
-def benchmark_running():
-    number = 1
-    longseqs = mixed_seqs * 20000 # 1M sequences, 50 unique
-    # longseqs = mixed_seqs * 5000000 # 250M sequences, 50 unique
+def test_benchmark_running(rapid_test=True):
+    if rapid_test:
+        longseqs = mixed_seqs * 20000 # 1M sequences, 50 unique
+        number=1
+        repeat=1
+    else:
+        longseqs = mixed_seqs * 5000000 # 250M sequences, 50 unique
+        number=2
+        repeat=2
+
     seqs_mat, seqs_L = pwsd.matrices.seqs2mat(longseqs)
     indices = np.array([(0, i) for i in range(seqs_mat.shape[0])], dtype=np.int)
 
     namespace = globals()
     namespace.update(locals())
-    #res = timeit.repeat(stmt='pwsd.matrices.seqs2mat(longseqs)', repeat=1, number=1, globals=namespace)
+    #res = timeit.repeat(stmt='pwsd.matrices.seqs2mat(longseqs)', repeat=repeat, number=repeat, globals=namespace)
     #print(f'Conversion of {len(longseqs)} sequences with seqs2mat(): {1e3 * np.min(res)/1:1.1f} ms')
 
-    nb_metrics = [('edit', 'pwsd.running.nb_running_editdistance', ['3']),
-                   ('tcrdist', 'pwsd.running.nb_running_tcrdist', ['50', '0.05', 'pwsd.matrices.tcr_nb_distance_matrix', '3', '4', '3', '2', 'True']),
-                   ('tcrdist (optimal gappos)', 'pwsd.running.nb_running_tcrdist', ['50', '0.05', 'pwsd.matrices.tcr_nb_distance_matrix', '3', '4', '3', '2', 'False'])]
+    nb_metrics = [('edit', 'pwsd.running.nb_running_editdistance', ['3', '0.05'], 'pwsd.metrics.nb_vector_editdistance'),
+                   ('tcrdist', 'pwsd.running.nb_running_tcrdist', ['50', '0.05', 'pwsd.matrices.tcr_nb_distance_matrix', '3', '4', '3', '2', 'True'], 'pwsd.metrics.nb_vector_tcrdist'),
+                   ('tcrdist (optimal gappos)', 'pwsd.running.nb_running_tcrdist', ['50', '0.05', 'pwsd.matrices.tcr_nb_distance_matrix', '3', '4', '3', '2', 'False'], 'pwsd.metrics.nb_vector_tcrdist')]
 
-    print(f'Benchmarks on {len(longseqs)//1000000}M sequences (50 unique):')
-    for par in [False, True]:
-        for metric_name, metric_str, kwargs in nb_metrics:
-            # nb_running_editdistance(0, seqs_mat, seqs_L, radius, est_density)
-            nb_metric = eval(f'nb.jit({metric_str}, nopython=True, parallel={par}, nogil=True)')
-            namespace.update({'nb_metric':nb_metric})
-            stmt = f'nb_metric(0, seqs_mat, seqs_L{", " if kwargs else ""}{", ".join(kwargs)})'
-            res = timeit.repeat(stmt=stmt, setup=stmt, repeat=1, number=number, globals=namespace)
-            print(f'Numba running, parallel={par}, {metric_name} distances:\t{1e3 * np.min(res)/number:1.1f} ms')
+    print(f'\nBenchmarks on {len(longseqs)//1000000}M sequences (50 unique):')
+    for metric_name, metric_str, kwargs, vec_metric in nb_metrics:
+        # nb_running_editdistance(0, seqs_mat, seqs_L, radius, est_density)
+        # nb_metric = eval(f'nb.jit({metric_str}, nopython=True, parallel={par}, nogil=True)')
+        # namespace.update({'nb_metric':nb_metric})
+        stmt = f'{metric_str}(0, seqs_mat, seqs_L{", " if kwargs else ""}{", ".join(kwargs)})'
+        res = timeit.repeat(stmt=stmt, setup=stmt, repeat=repeat, number=number, globals=namespace)
+        print(f'Numba running, {metric_name} distances:\t{1e3 * np.min(res)/number:1.1f} ms')
+        
+        ind, d = eval(stmt)
+        #nb_metric = eval(f'nb.jit({vec_metric}, nopython=True, parallel=False, nogil=True)')
+        #namespace.update({'nb_metric':nb_metric})
+        stmt = f'{vec_metric}(indices, seqs_mat, seqs_L{", " if len(kwargs) > 2 else ""}{", ".join(kwargs[2:])})'
+        #print(stmt)
+        d2 = eval(stmt)
+        ind2 = np.nonzero(d2 <= int(kwargs[0]))[0]
+        d2 = d2[ind2]
+        if np.all(d == d2):
+            print(f'\tConfirmed {len(d)//1000}K neighbors.')
+        else:
+            print(f'\tFound {len(d)//1000}K neighbors with running; expected {len(d2)//1000}K.')
+            print(ind[:10], d[:10])
+            print(ind2[:10], d2[:10])
+            raise
 
 
-def benchmark_metrics():
-    number = 2
-    # longseqs = mixed_seqs * 10000 # 500K sequences, 50 unique
-    longseqs = mixed_seqs * 500000 # 25M sequences, 50 unique
+def test_benchmark_metrics(rapid_test=True):
+    if rapid_test:
+        longseqs = mixed_seqs * 20000 # 1M sequences, 50 unique
+        number=1
+        repeat=1
+    else:
+        longseqs = mixed_seqs * 500000 # 25M sequences, 50 unique
+        number=3
+        repeat=3
+
     seqs_mat, seqs_L = pwsd.matrices.seqs2mat(longseqs)
     indices = np.array([(0, i) for i in range(seqs_mat.shape[0])], dtype=np.int)
 
     namespace = globals()
     namespace.update(locals())
-    #res = timeit.repeat(stmt='pwsd.matrices.seqs2mat(longseqs)', repeat=1, number=1, globals=namespace)
-    #print(f'Conversion of {len(longseqs)} sequences with seqs2mat(): {1e3 * np.min(res)/1:1.1f} ms')
+    res = timeit.repeat(stmt='pwsd.matrices.seqs2mat(longseqs)', repeat=repeat, number=number, globals=namespace)
+    print(f'Conversion of {len(longseqs)} sequences with seqs2mat(): {1e3 * np.min(res)/1:1.1f} ms')
 
     nb_metrics = [('edit', 'pwsd.metrics.nb_editdistance', []),
                    ('tcrdist', 'pwsd.metrics.nb_tcrdist', ['pwsd.matrices.tcr_nb_distance_matrix', '3', '4', '3', '2', 'True']),
                    ('tcrdist (optimal gappos)', 'pwsd.metrics.nb_tcrdist', ['pwsd.matrices.tcr_nb_distance_matrix', '3', '4', '3', '2', 'False']),
                    ('hamming', 'pwsd.metrics.nb_hamming_distance', ['False'])]
 
+    print(f'\nBenchmarks on {len(longseqs)//1000000}M sequences (50 unique):')
     for metric_name, metric_str, kwargs in nb_metrics:
-        stmt = f'pwsd.numba_tools.nb_distance_vec(seqs_mat, seqs_L, indices, {metric_str}{", " if kwargs else ""}{", ".join(kwargs)})'
+        stmt = f'pwsd.numba_tools.nb_distance_vec(indices, seqs_mat, seqs_L, {metric_str}{", " if kwargs else ""}{", ".join(kwargs)})'
         #stmt = f'nb_distance_vec(seqs_mat, seqs_L, indices, {metric_str}{", " if kwargs else ""}{", ".join(kwargs)})'
-        res = timeit.repeat(stmt=stmt, setup=stmt, repeat=2, number=number, globals=namespace)
+        res = timeit.repeat(stmt=stmt, setup=stmt, repeat=repeat, number=number, globals=namespace)
         print(f'Numba, individual {metric_name} distances:\t{1e3 * np.min(res)/number:1.1f} ms')
-
-
-    """nb_metric = nb.jit(pwsd.metrics.nb_vector_editdistance, nopython=True, parallel=True, nogil=True)
-    print(nb_metric)
-    dude = nb_metric(seqs_mat, seqs_L, indices)"""
 
     nb_vec_metrics = [('edit', 'pwsd.metrics.nb_vector_editdistance', []),
                       ('hamming', 'pwsd.metrics.nb_vector_hamming_distance', ['False']),
                        ('tcrdist', 'pwsd.metrics.nb_vector_tcrdist', ['pwsd.matrices.tcr_nb_distance_matrix', '3', '4', '3', '2', 'True']),
                        ('tcrdist (optimal gappos)', 'pwsd.metrics.nb_vector_tcrdist', ['pwsd.matrices.tcr_nb_distance_matrix', '3', '4', '3', '2', 'False'])]
-    for par in [False, True]:
-        for metric_name, metric_str, kwargs in nb_vec_metrics:
-            # nb_vector_editdistance(0, seqs_mat, seqs_L)
-            nb_metric = eval(f'nb.jit({metric_str}, nopython=True, parallel={par}, nogil=True)')
-            namespace.update({'nb_metric':nb_metric})
-            stmt = f'nb_metric(seqs_mat, seqs_L, indices{", " if kwargs else ""}{", ".join(kwargs)})'
-            res = timeit.repeat(stmt=stmt, setup=stmt, repeat=2, number=number, globals=namespace)
-            print(f'Numba vectorized, parallel={par}, {metric_name} distances:\t{1e3 * np.min(res)/number:1.1f} ms')
+    for metric_name, metric_str, kwargs in nb_vec_metrics:
+        # nb_metric = eval(f'nb.jit({metric_str}, nopython=True, parallel={par}, nogil=True)')
+        # namespace.update({'nb_metric':nb_metric})
+        stmt = f'{metric_str}(indices, seqs_mat, seqs_L{", " if kwargs else ""}{", ".join(kwargs)})'
+        res = timeit.repeat(stmt=stmt, setup=stmt, repeat=repeat, number=number, globals=namespace)
+        print(f'Numba vectorized, {metric_name} distances:\t{1e3 * np.min(res)/number:1.1f} ms')
 
-def benchmark_pairwise_rect():
-    # longseqs = mixed_seqs * 10 # 500 sequences, 50 unique, 250,000 squared or 2,500 squared-unique
-    longseqs = mixed_seqs * 50 # 2500 sequences, 50 unique, 6,250,000 squared or 2,500 squared-unique
-    # longseqs = mixed_seqs * 500 # 25000 sequences, 50 unique, 625,000,000 squared or 2,500 squared-unique
+def test_benchmark_pairwise_rect(rapid_test=True):
+    if rapid_test:
+        longseqs = mixed_seqs * 10 # 500 sequences, 50 unique, 250,000 squared or 2,500 squared-unique
+        repeat = 1
+        number = 1
+    else:
+        longseqs = mixed_seqs * 50 # 2500 sequences, 50 unique, 6,250,000 squared or 2,500 squared-unique
+        # longseqs = mixed_seqs * 500 # 25000 sequences, 50 unique, 625,000,000 squared or 2,500 squared-unique
+        repeat = 2
+        number = 2
 
-    metrics = [('Numba edit', 'pwsd.metrics.nb_vector_editdistance', [], True),
+    metrics = [('Numba edit', 'pwsd.metrics.nb_vector_editdistance', ['pwsd.matrices.identity_nb_distance_matrix'], True),
                    ('Numba tcrdist', 'pwsd.metrics.nb_vector_tcrdist', ['pwsd.matrices.tcr_nb_distance_matrix', '3', '4', '3', '2', 'True'], True),
                    ('Numba tcrdist (optimal gappos)', 'pwsd.metrics.nb_vector_tcrdist', ['pwsd.matrices.tcr_nb_distance_matrix', '3', '4', '3', '2', 'False'], True),
                    ('Numba hamming', 'pwsd.metrics.nb_vector_hamming_distance', ['False'], True),
@@ -161,17 +184,19 @@ def benchmark_pairwise_rect():
                    ('Cython stringdist', 'stringdist.levenshtein', [], False),
                    ('Cython editdistance', 'editdistance.eval', [], False)]
 
-    metrics = metrics[:4]
+    # metrics = [metrics[1]]
+    # metrics = [metrics[0]]
     
     pw_functions = [('rect', 'pwsd.apply_pairwise_rect(seqs1=longseqs, seqs2=longseqs, ncpus={ncpus}, metric={metric_str}, uniqify={uniqify}, use_numba={use_numba}, numba_args=({kwargs_str}))'),
                     ('square', 'pwsd.apply_pairwise_sq(seqs=longseqs, ncpus={ncpus}, metric={metric_str}, uniqify={uniqify}, use_numba={use_numba}, numba_args=({kwargs_str}))')]
 
-    pw_functions = pw_functions[1:]
+    """Square is deprecated"""
+    pw_functions = pw_functions[:1]
     
     namespace = globals()
     namespace.update(locals())
-    for ncpus in [1, 2]:
-        for uniq_str, uniqify, number in [(f'{len(mixed_seqs)**2} unique', True, 5), (f'all {len(longseqs)**2}', False, 2)]:
+    for ncpus in [2, 1, 4]:
+        for uniq_str, uniqify, number in [(f'{len(mixed_seqs)**2} unique', True, 2), (f'all {len(longseqs)**2}', False, 2)]:
             for pw_name, pw_str in pw_functions:
                 for metric_name, metric_stmt, kwargs, use_numba in metrics:
                     stmt = pw_str.format(ncpus=ncpus,
@@ -179,8 +204,17 @@ def benchmark_pairwise_rect():
                                          uniqify=uniqify,
                                          use_numba=use_numba,
                                          kwargs_str=f'{", ".join(kwargs)}{"," if kwargs else ""}')
-                    res = timeit.repeat(stmt=stmt, setup=stmt, repeat=3, number=number, globals=namespace)
+                    res = timeit.repeat(stmt=stmt, setup=stmt, repeat=repeat, number=number, globals=namespace)
                     print(f'PWSD pairwise {pw_name} ({uniq_str}), ncpus={ncpus}, {metric_name} distances:\t{1e3 * np.min(res)/number:1.1f} ms')
+
+if __name__ == '__main__':
+    #test_nb_pw_rect()
+    #test_benchmark_running(rapid_test=True)
+    #test_benchmark_metrics(rapid_test=True)
+    #test_benchmark_pairwise_rect(rapid_test=True)
+    pass
+    #unittest.main()
+
 '''
 seqs = ['CASSARGF','CASSAARGF'] * 40
 #%timeit -r 1 apply_pairwise_sq(seqs=seqs , ncpus=1, metric=pwsd.metrics.nw_hamming_metric)
@@ -234,8 +268,6 @@ for metric_name, metric_str, kwargs in nb_vec_metrics:
     print(f'Numba, vectorized {metric_name} distances: {1e3 * np.min(res)/number:1.1f} ms')
 '''
 
-if __name__ == '__main__':
-    benchmark_running()
-    # benchmark_metrics()
-    # benchmark_pairwise_rect()
+
+    
     

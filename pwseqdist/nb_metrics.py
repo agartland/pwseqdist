@@ -25,8 +25,8 @@ def nb_hamming_distance(vec1, vec2, check_lengths=True):
             tot += 1
     return tot
 
-# @nb.jit(nopython=True, parallel=True, nogil=True)
-def nb_vector_hamming_distance(seqs_mat, seqs_L, indices, check_lengths=True):
+@nb.jit(nopython=True, parallel=False, nogil=True)
+def nb_vector_hamming_distance(indices, seqs_mat, seqs_L, check_lengths=True):
     dist = np.zeros(indices.shape[0], dtype=np.int16)
     for ind_i in nb.prange(indices.shape[0]):
         query_i = indices[ind_i, 0]
@@ -175,9 +175,42 @@ def nb_tcrdist(seq_vec1, seq_vec2, distance_matrix=tcr_nb_distance_matrix, dist_
     """Note that weight_cdr3_region is not applied to the gap penalty"""
     return min_dist * dist_weight + len_diff * gap_penalty
 
+def nb_vector_tcrdist(indices, seqs_mat, seqs_L, distance_matrix=tcr_nb_distance_matrix, dist_weight=3, gap_penalty=4, ntrim=3, ctrim=2, fixed_gappos=True):
+    """Computes the tcrdist distance for sequences in seqs_mat indicated by pairs of indices.
 
-# @nb.jit(nopython=True, parallel=True, nogil=True)
-def nb_vector_tcrdist(seqs_mat, seqs_L, indices, distance_matrix=tcr_nb_distance_matrix, dist_weight=3, gap_penalty=4, ntrim=3, ctrim=2, fixed_gappos=True):
+    Note: to use with non-CDR3 sequences set ntrim and ctrim to 0.
+
+    Parameters
+    ----------
+    indices : np.ndarray [nseqs, 2]
+        Indices into seqs_mat indicating pairs of sequences to compare.
+    seqs_mat : np.ndarray dtype=int16 [nseqs, seq_length]
+        Created by pwsd.seqs2mat with padding to accomodate
+        sequences of different lengths (-1 padding)
+    seqs_L : np.ndarray [nseqs]
+        A vector containing the length of each sequence,
+        without the padding in seqs_mat
+    distance_matrix : np.ndarray [alphabet, alphabet] dtype=int32
+        A square distance matrix (NOT a similarity matrix).
+        Matrix must match the alphabet that was used to create
+        seqs_mat, where each AA is represented by an index into the alphabet.
+    dist_weight : int
+        Weight applied to the mismatch distances before summing with the gap penalties
+    gap_penalty : int
+        Distance penalty for the difference in the length of the two sequences
+    ntrim/ctrim : int
+        Positions trimmed off the N-terminus (0) and C-terminus (L-1) ends of the peptide sequence. These symbols will be ignored
+        in the distance calculation.
+    fixed_gappos : bool
+        If True, insert gaps at a fixed position after the cysteine residue statring the CDR3 (typically position 6).
+        If False, find the "optimal" position for inserting the gaps to make up the difference in length"""
+
+    return _nb_vector_tcrdist(indices, seqs_mat, seqs_L, distance_matrix, dist_weight, gap_penalty, ntrim, ctrim, fixed_gappos)
+
+@nb.jit(nopython=True, parallel=False, nogil=True)
+def _nb_vector_tcrdist(indices, seqs_mat, seqs_L, distance_matrix=tcr_nb_distance_matrix, dist_weight=3, gap_penalty=4, ntrim=3, ctrim=2, fixed_gappos=True):
+    """This function works OK on its own. Wrapping it with the above python function was a workaround because
+    joblib and multiprocessing seem to have an issue retaining default arguments with numba functions."""
     assert seqs_mat.shape[0] == seqs_L.shape[0]
 
     dist = np.zeros(indices.shape[0], dtype=np.int16)
@@ -228,29 +261,32 @@ def nb_vector_tcrdist(seqs_mat, seqs_L, indices, distance_matrix=tcr_nb_distance
         dist[ind_i] = min_dist * dist_weight + len_diff * gap_penalty
     return dist
 
-
-# @nb.jit(nopython=True, parallel=True, nogil=True)
-def nb_vector_editdistance(seqs_mat, seqs_L, indices, distance_matrix=identity_nb_distance_matrix, gap_penalty=1):
+def nb_vector_editdistance(indices, seqs_mat, seqs_L, distance_matrix=identity_nb_distance_matrix, gap_penalty=1):
     """Computes the Levenshtein edit distance for sequences in seqs_mat indicated
     by pairs of indices.
 
     Parameters
     ----------
+    indices : np.ndarray [nseqs, 2]
+        Indices into seqs_mat indicating pairs of sequences to compare.
     seqs_mat : np.ndarray dtype=int16 [nseqs, seq_length]
         Created by pwsd.seqs2mat with padding to accomodate
         sequences of different lengths (-1 padding)
     seqs_L : np.ndarray [nseqs]
         A vector containing the length of each sequence,
         without the padding in seqs_mat
-    indices : np.ndarray [nseqs, 2]
-        Indices into seqs_mat indicating pairs of sequences to compare.
     distance_matrix : np.ndarray [alphabet, alphabet] dtype=int32
         A square distance matrix (NOT a similarity matrix).
         Matrix must match the alphabet that was used to create
         seqs_mat, where each AA is represented by an index into the alphabet.
     gap_penalty : int
         Penalty for insertions and deletions in the optimal alignment."""
+    return _nb_vector_editdistance(indices, seqs_mat, seqs_L, distance_matrix, gap_penalty)
 
+@nb.jit(nopython=True, parallel=False, nogil=True)
+def _nb_vector_editdistance(indices, seqs_mat, seqs_L, distance_matrix=identity_nb_distance_matrix, gap_penalty=1):
+    """This function works OK on its own. Wrapping it with the above python function was a workaround because
+    joblib and multiprocessing seem to have an issue retaining default arguments with numba functions."""
     assert seqs_mat.shape[0] == seqs_L.shape[0]
     mx_L = nb.int_(np.max(seqs_L))
 

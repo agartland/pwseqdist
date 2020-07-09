@@ -4,3 +4,5 @@ parmap>=1.5.2
 pytest>=5.4.1
 scipy>=1.4.1
 numba
+editdistance
+stringdist

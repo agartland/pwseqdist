@@ -7,13 +7,15 @@ __all__ = ['nb_running_editdistance',
             'nb_running_tcrdist']
 
 """TODO:
- - Currently, the way that nndist and neighbors is dynamically expanded when it gets full
- is not compatible with parallelization. Seems like I could restructure this so that the
- expanding doesn't happen inside the loop, but rather on the outside of an inner loop
- that only goes as far as the end of the array"""
+ - The way that nndist and neighbors is dynamically expanded when it gets full
+ is not compatible with parallelization. The fact that only some of the distance
+ computations return a result (d <= R) really doesn't lend itself to simple
+ for-loop parallelization. These functions are best run on one CPU, with the tasks
+ for multiple query sequences spread to multiple CPUs using multiprocessing,
+ or ideally multithreading with shared seqs_mat memory, since numba can release the GIL"""
 
 
-#@nb.jit(nopython=True, parallel=True)
+@nb.jit(nopython=True, parallel=False)
 def nb_running_tcrdist(query_i, seqs_mat, seqs_L, radius, density_est=0.05, distance_matrix=tcr_nb_distance_matrix, dist_weight=3, gap_penalty=4, ntrim=3, ctrim=2, fixed_gappos=True):
     """Compute "tcrdist" distance between two TCR CDR3 sequences. Using default weight, gap penalty, ntrim and ctrim is equivalent to the
     original distance published in Dash et al, (2017). By setting ntrim and ctrim to 0 and adjusting the dist_weight, it is also possible
@@ -66,7 +68,7 @@ def nb_running_tcrdist(query_i, seqs_mat, seqs_L, radius, density_est=0.05, dist
     neighbor_count = 0
     neighbors = np.zeros(chunk_sz, dtype=np.uint32)
     nndists = np.zeros(chunk_sz, dtype=np.uint32)
-    for seq_i in nb.prange(seqs_mat.shape[0]):
+    for seq_i in range(seqs_mat.shape[0]):
         s_L = seqs_L[seq_i]
         short_len = min(q_L, s_L)
         len_diff = abs(q_L - s_L)
@@ -128,7 +130,7 @@ def nb_running_tcrdist(query_i, seqs_mat, seqs_L, radius, density_est=0.05, dist
     return neighbors[:neighbor_count], nndists[:neighbor_count]
 
 
-#@nb.jit(nopython=True, parallel=True)
+@nb.jit(nopython=True, parallel=False)
 def nb_running_editdistance(query_i, seqs_mat, seqs_L, radius, density_est=0.05, distance_matrix=identity_nb_distance_matrix, gap_penalty=1):
     """Computes the Levenshtein edit distance between the query sequence and sequences in seqs_mat.
     Returns a vector of positinal indices of seqs that were within the radius of the query seq and their edit distances.
@@ -177,7 +179,7 @@ def nb_running_editdistance(query_i, seqs_mat, seqs_L, radius, density_est=0.05,
     its OK to only use part of it for the smaller sequences
     NOTE that to create a 2D array it must be created 1D anfd reshaped"""
     ldmat = np.zeros(q_L * mx_L, dtype=np.int16).reshape((q_L, mx_L))
-    for seq_i in nb.prange(seqs_mat.shape[0]):
+    for seq_i in range(seqs_mat.shape[0]):
         # query_i = indices[ind_i, 0]
         # seq_i = indices[ind_i, 1]
         

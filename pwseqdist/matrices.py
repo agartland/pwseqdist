@@ -176,23 +176,23 @@ def seq2vec(seq, alphabet=parasail_aa_alphabet_with_unknown, length=None):
             break
         try:
             vec[aai] = alphabet.index(seq[aai])
-        except ValueError('Unknown symbols given value for last column/row of matrix'):
+        except ValueError:
             """Unknown symbols given value for last column/row of matrix"""
             vec[aai] = len(alphabet)
     return vec
 
-def vec2seq(vec, alphabet=parasail_aa_alphabet_with_unknown):
-    """
-    Convert a numpy array of integers back into a AA string sequence.
+def vec2seq(vec, alphabet=parasail_aa_alphabet_with_unknown, unknown='X'):
+    """Convert a numpy array of integers back into a AA string sequence.
     (opposite of seq2vec())
     
     Parameters
     ----------
     vec : np.array
-
     alphabet : str
-        string of characters usely specifying the 23 AA Parasail 
-        uses for its substitution matrix.
+        String of characters for specifying the integer encoding
+        of each symbol, based on its position in the alphabet
+    unknown : char
+        Symbol used for integer codes that are beyond the length of the alphabet
 
     Returns
     -------
@@ -206,19 +206,17 @@ def vec2seq(vec, alphabet=parasail_aa_alphabet_with_unknown):
     try:
         seq =  ''.join([alphabet[aai] for aai in vec])
     except IndexError:
-        max_int = len(alphabet)-1
-        raise ValueError(f"vec2seq only works with integers 0 to {max_int} corresponding with {alphabet}")
+        seq =  ''.join([alphabet[aai] if aai < len(alphabet) else unknown for aai in vec])
     return seq
 
 def seqs2mat(seqs, alphabet=parasail_aa_alphabet_with_unknown, max_len=None):
-    """
-    Convert a collection of AA sequences into a
+    """Convert a collection of AA sequences into a
     numpy matrix of integers for fast comparison.
 
     Parameters
     ----------
     seqs : list 
-        list of strings of equal length
+        List of strings
 
     Returns
     -------
@@ -249,10 +247,38 @@ def seqs2mat(seqs, alphabet=parasail_aa_alphabet_with_unknown, max_len=None):
                 break
             try:
                 mat[si, aai] = alphabet.index(s[aai])
-            except ValueError('Unknown symbols given value for last column/row of matrix'):
+            except ValueError:
                 """Unknown symbols given value for last column/row of matrix"""
                 mat[si, aai] = len(alphabet)
     return mat, L
+
+def validate_seqs(seqs, alphabet=parasail_aa_alphabet_with_unknown, unknown=None):
+    """Check each sequence for an unknown symbol (not in the alphabet)
+    and replace it with either the last symbol in the alphabet (unknown = None),
+    or the symbol in unknown.
+
+    NOTE: decided not to write this function after all because it will be very slow
+    for a large number of sequences and is no needed because all the distance functions
+    currently have a way of handling unknown symbols. 
+
+    Parameters
+    ----------
+    seqs : list of strings
+    alphabet : str
+        String of characters for specifying the integer encoding
+        of each symbol, based on its position in the alphabet
+    unknown : char
+        Symbol used to replace symbols not in alphabet
+        Optionally, None means that the last symbol of the alphabet
+        is used to represent unknowns
+
+    Returns
+    -------
+    seqs : list of strings
+        Same as input seqs, except unknown symbols have been replaced"""
+
+    pass
+
 
 def mat2seqs(mat):
     """

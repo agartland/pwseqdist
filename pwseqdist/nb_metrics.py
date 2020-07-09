@@ -5,12 +5,13 @@ import numba as nb
 from .matrices import dict_from_matrix, parasail_aa_alphabet, identity_nb_distance_matrix, tcr_nb_distance_matrix
 
 __all__ = ['nb_hamming_distance',
-            'nb_editdistance',
-            'nb_vector_editdistance',
-            'nb_vector_tcrdist_distance',
-            'nb_tcrdist_distance']
+           'nb_vector_hamming_distance',
+           'nb_editdistance',
+           'nb_vector_editdistance',
+           'nb_tcrdist',
+           'nb_vector_tcrdist']
 
-@nb.jit(nopython=True, parallel=False)
+@nb.jit(nopython=True, parallel=False, nogil=True)
 def nb_hamming_distance(vec1, vec2, check_lengths=True):
     if check_lengths:
         assert vec1.shape[0] == vec2.shape[0]
@@ -24,7 +25,23 @@ def nb_hamming_distance(vec1, vec2, check_lengths=True):
             tot += 1
     return tot
 
-@nb.jit(nopython=True, parallel=False)
+# @nb.jit(nopython=True, parallel=True, nogil=True)
+def nb_vector_hamming_distance(seqs_mat, seqs_L, indices, check_lengths=True):
+    dist = np.zeros(indices.shape[0], dtype=np.int16)
+    for ind_i in nb.prange(indices.shape[0]):
+        query_i = indices[ind_i, 0]
+        seq_i = indices[ind_i, 1]
+        q_L = seqs_L[query_i]
+        s_L = seqs_L[seq_i]
+        if check_lengths:
+            assert q_L == s_L
+        for i in range(min(q_L, s_L)):
+            if seqs_mat[query_i, i] != seqs_mat[seq_i, i]:
+                dist[ind_i] += 1
+    return dist
+
+
+@nb.jit(nopython=True, parallel=False, nogil=True)
 def nb_editdistance(seq_vec1, seq_vec2, distance_matrix=identity_nb_distance_matrix, gap_penalty=1):
     """Computes the Levenshtein edit distance between two sequences, with the AA substitution
     distances provided in distance_matrix.
@@ -73,8 +90,8 @@ def nb_editdistance(seq_vec1, seq_vec2, distance_matrix=identity_nb_distance_mat
                                  ldmat[row-1, col-1] + distance_matrix[seq_vec1[row-1], seq_vec2[col-1]]) # substitution
     return ldmat[row, col]
 
-@nb.jit(nopython=True, parallel=False)
-def nb_tcrdist_distance(seq_vec1, seq_vec2, distance_matrix=tcr_nb_distance_matrix, dist_weight=3, gap_penalty=4, ntrim=3, ctrim=2, fixed_gappos=True):
+@nb.jit(nopython=True, parallel=False, nogil=True)
+def nb_tcrdist(seq_vec1, seq_vec2, distance_matrix=tcr_nb_distance_matrix, dist_weight=3, gap_penalty=4, ntrim=3, ctrim=2, fixed_gappos=True):
     """Compute "tcrdist" distance between two TCR CDR3 sequences. Using default weight, gap penalty, ntrim and ctrim is equivalent to the
     original distance published in Dash et al, (2017). By setting ntrim and ctrim to 0 and adjusting the dist_weight, it is also possible
     to compute the CDR1/2 loop distances which can be combined with the CDR3 distance for overall distance. See tcrdist2 package for details.
@@ -159,20 +176,20 @@ def nb_tcrdist_distance(seq_vec1, seq_vec2, distance_matrix=tcr_nb_distance_matr
     return min_dist * dist_weight + len_diff * gap_penalty
 
 
-@nb.jit(nopython=True, parallel=False)
-def nb_vector_tcrdist_distance(query_i, seqs_mat, seqs_L, distance_matrix=tcr_nb_distance_matrix, dist_weight=3, gap_penalty=4, ntrim=3, ctrim=2, fixed_gappos=True):
+# @nb.jit(nopython=True, parallel=True, nogil=True)
+def nb_vector_tcrdist(seqs_mat, seqs_L, indices, distance_matrix=tcr_nb_distance_matrix, dist_weight=3, gap_penalty=4, ntrim=3, ctrim=2, fixed_gappos=True):
     assert seqs_mat.shape[0] == seqs_L.shape[0]
 
-    q_L = seqs_L[query_i]
-    dist = np.zeros(seqs_mat.shape[0], dtype=np.int16)
-    for seq_i in nb.prange(seqs_mat.shape[0]):
+    dist = np.zeros(indices.shape[0], dtype=np.int16)
+    for ind_i in nb.prange(indices.shape[0]):
+        query_i = indices[ind_i, 0]
+        seq_i = indices[ind_i, 1]
+        q_L = seqs_L[query_i]
         s_L = seqs_L[seq_i]
         if q_L == s_L:
             """No gaps: substitution distance"""
-            tmp_dist = 0
             for i in range(ntrim, q_L - ctrim):
-                tmp_dist += distance_matrix[seqs_mat[query_i, i], seqs_mat[seq_i, i]]
-            dist[seq_i] = tmp_dist * dist_weight
+                dist[ind_i] += distance_matrix[seqs_mat[query_i, i], seqs_mat[seq_i, i]] * dist_weight
             continue
 
         short_len = min(q_L, s_L)
@@ -208,12 +225,12 @@ def nb_vector_tcrdist_distance(query_i, seqs_mat, seqs_L, distance_matrix=tcr_nb
                 # min_count = tmp_count
             if min_dist == 0:
                 break
-        dist[seq_i] = min_dist * dist_weight + len_diff * gap_penalty
+        dist[ind_i] = min_dist * dist_weight + len_diff * gap_penalty
     return dist
 
 
-@nb.jit(nopython=True, parallel=False)
-def nb_vector_editdistance(query_i, seqs_mat, seqs_L, distance_matrix=identity_nb_distance_matrix, gap_penalty=1):
+# @nb.jit(nopython=True, parallel=True, nogil=True)
+def nb_vector_editdistance(seqs_mat, seqs_L, indices, distance_matrix=identity_nb_distance_matrix, gap_penalty=1):
     """Computes the Levenshtein edit distance for sequences in seqs_mat indicated
     by pairs of indices.
 
@@ -235,28 +252,28 @@ def nb_vector_editdistance(query_i, seqs_mat, seqs_L, distance_matrix=identity_n
         Penalty for insertions and deletions in the optimal alignment."""
 
     assert seqs_mat.shape[0] == seqs_L.shape[0]
-    q_L = seqs_L[query_i]
-    mx_L = np.max(seqs_L)
+    mx_L = nb.int_(np.max(seqs_L))
 
-    dist = np.zeros(seqs_mat.shape[0], dtype=np.int16)
+    dist = np.zeros(indices.shape[0], dtype=np.int16)
     
     """As long as ldmat is big enough to accomodate the largest sequence
     its OK to only use part of it for the smaller sequences
-    NOTE that to create a 2D array it must be created 1D anfd reshaped"""
-    ldmat = np.zeros(q_L * mx_L, dtype=np.int16).reshape((q_L, mx_L))
-    for seq_i in nb.prange(seqs_mat.shape[0]):
-        # query_i = indices[ind_i, 0]
-        # seq_i = indices[ind_i, 1]
+    NOTE that to create a 2D array it must be created 1D and reshaped"""
+    ldmat = np.zeros(mx_L * mx_L, dtype=np.int16).reshape((mx_L, mx_L))
+    for ind_i in nb.prange(indices.shape[0]):
+        query_i = indices[ind_i, 0]
+        seq_i = indices[ind_i, 1]
         
+        q_L = seqs_L[query_i]
         s_L = seqs_L[seq_i]
         if q_L == s_L:
             """No gaps: substitution distance
             This will make it differ from a strict edit-distance since
             the optimal edit-distance may insert same number of gaps in both sequences"""
-            tmp_dist = 0
+            #tmp_dist = 0
             for i in range(q_L):
-                tmp_dist += distance_matrix[seqs_mat[query_i, i], seqs_mat[seq_i, i]]
-            dist[seq_i] = tmp_dist
+                dist[ind_i] += distance_matrix[seqs_mat[query_i, i], seqs_mat[seq_i, i]]
+            #dist[ind_i] = tmp_dist
             continue
     
         """Do not need to re-zero each time"""
@@ -272,10 +289,10 @@ def nb_vector_editdistance(query_i, seqs_mat, seqs_L, distance_matrix=identity_n
                 ldmat[row, col] = min(ldmat[row-1, col] + gap_penalty,
                                      ldmat[row, col-1] + gap_penalty,
                                      ldmat[row-1, col-1] + distance_matrix[seqs_mat[query_i, row-1], seqs_mat[seq_i, col-1]]) # substitution
-        dist[seq_i] = ldmat[row, col]
+        dist[ind_i] = ldmat[row, col]
     return dist
 
-@nb.jit(nopython=True, parallel=False)
+@nb.jit(nopython=True, nogil=True)
 def _nb_hamming_distance(str1, str2):
     assert len(str1) == len(str2)
 
@@ -285,7 +302,7 @@ def _nb_hamming_distance(str1, str2):
             tot += 1
     return tot
 
-@nb.jit(nopython=True, parallel=False)
+@nb.jit(nopython=True, nogil=True)
 def _nb_subst_metric(seq1, seq2, subst_dict, as_similarity=False):
     """Computes sequence similarity based on the substitution matrix.
     Requires that sequences are pre-aligned and equal length.

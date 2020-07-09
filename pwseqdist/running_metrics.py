@@ -4,10 +4,17 @@ import numba as nb
 from .matrices import dict_from_matrix, parasail_aa_alphabet, identity_nb_distance_matrix, tcr_nb_distance_matrix
 
 __all__ = ['nb_running_editdistance',
-            'nb_running_tcrdist_distance']
+            'nb_running_tcrdist']
 
-@nb.jit(nopython=True, parallel=False)
-def nb_running_tcrdist_distance(query_i, seqs_mat, seqs_L, radius, density_est=0.1, distance_matrix=tcr_nb_distance_matrix, dist_weight=3, gap_penalty=4, ntrim=3, ctrim=2, fixed_gappos=True):
+"""TODO:
+ - Currently, the way that nndist and neighbors is dynamically expanded when it gets full
+ is not compatible with parallelization. Seems like I could restructure this so that the
+ expanding doesn't happen inside the loop, but rather on the outside of an inner loop
+ that only goes as far as the end of the array"""
+
+
+#@nb.jit(nopython=True, parallel=True)
+def nb_running_tcrdist(query_i, seqs_mat, seqs_L, radius, density_est=0.05, distance_matrix=tcr_nb_distance_matrix, dist_weight=3, gap_penalty=4, ntrim=3, ctrim=2, fixed_gappos=True):
     """Compute "tcrdist" distance between two TCR CDR3 sequences. Using default weight, gap penalty, ntrim and ctrim is equivalent to the
     original distance published in Dash et al, (2017). By setting ntrim and ctrim to 0 and adjusting the dist_weight, it is also possible
     to compute the CDR1/2 loop distances which can be combined with the CDR3 distance for overall distance. See tcrdist2 package for details.
@@ -42,7 +49,14 @@ def nb_running_tcrdist_distance(query_i, seqs_mat, seqs_L, radius, density_est=0
         in the distance calculation.
     fixed_gappos : bool
         If True, insert gaps at a fixed position after the cysteine residue statring the CDR3 (typically position 6).
-        If False, find the "optimal" position for inserting the gaps to make up the difference in length"""
+        If False, find the "optimal" position for inserting the gaps to make up the difference in length
+
+    Returns
+    -------
+    indices : np.ndarray, dtype=np.uint32
+        Positional indices into seqs_mat of neighbors within radius R
+    nndists : np.ndarray, dtype=np.uint32
+        Distances to query seq of neighbors within radius R"""
     assert seqs_mat.shape[0] == seqs_L.shape[0]
 
     """Chunk size for allocating array space to hold neighbors: should be a minimum of 100 and a max of seqs_mat.shape[0]"""
@@ -51,6 +65,7 @@ def nb_running_tcrdist_distance(query_i, seqs_mat, seqs_L, radius, density_est=0
     q_L = seqs_L[query_i]
     neighbor_count = 0
     neighbors = np.zeros(chunk_sz, dtype=np.uint32)
+    nndists = np.zeros(chunk_sz, dtype=np.uint32)
     for seq_i in nb.prange(seqs_mat.shape[0]):
         s_L = seqs_L[seq_i]
         short_len = min(q_L, s_L)
@@ -66,9 +81,11 @@ def nb_running_tcrdist_distance(query_i, seqs_mat, seqs_L, radius, density_est=0
                     break"""
             if tmp_dist * dist_weight <= radius:
                 neighbors[neighbor_count] = seq_i
+                nndists[neighbor_count] = tmp_dist * dist_weight
                 neighbor_count += 1
                 if neighbor_count >= neighbors.shape[0]:
                     neighbors = np.concatenate((neighbors, np.zeros(chunk_sz, dtype=np.uint32)))
+                    nndists = np.concatenate((nndists, np.zeros(chunk_sz, dtype=np.uint32)))
             continue
         elif tot_gap_penalty > radius:
             continue
@@ -83,6 +100,7 @@ def nb_running_tcrdist_distance(query_i, seqs_mat, seqs_L, radius, density_est=0
                 min_gappos -= 1
                 max_gappos += 1
 
+        min_dist = -1
         for gappos in range(min_gappos, max_gappos + 1):
             tmp_dist = 0
             remainder = short_len - gappos
@@ -94,24 +112,26 @@ def nb_running_tcrdist_distance(query_i, seqs_mat, seqs_L, radius, density_est=0
             for c_i in range(ctrim, remainder):
                 """c_i refers to position relative to C term, counting upwards from C term"""
                 tmp_dist += distance_matrix[seqs_mat[query_i, q_L - 1 - c_i], seqs_mat[seq_i, s_L - 1 - c_i]]
-            tot_distance = tmp_dist * dist_weight + tot_gap_penalty
-            if tot_distance <= radius:
-                break
+            
+            if tmp_dist < min_dist or min_dist == -1:
+                min_dist = tmp_dist
 
+        tot_distance = min_dist * dist_weight + tot_gap_penalty
         if tot_distance <= radius:
             neighbors[neighbor_count] = seq_i
+            nndists[neighbor_count] = tot_distance
             neighbor_count += 1
             if neighbor_count >= neighbors.shape[0]:
-                neighbors = np.concatenate((neighbors, np.zeros(chunk_sz, dtype=np.uint32)))   
+                neighbors = np.concatenate((neighbors, np.zeros(chunk_sz, dtype=np.uint32)))
+                nndists = np.concatenate((nndists, np.zeros(chunk_sz, dtype=np.uint32)))
         
-    return neighbors[:neighbor_count]
+    return neighbors[:neighbor_count], nndists[:neighbor_count]
 
 
-@nb.jit(nopython=True, parallel=False)
-def nb_running_editdistance(query_i, seqs_mat, seqs_L, radius, density_est=0.1, distance_matrix=identity_nb_distance_matrix, gap_penalty=1):
-    """Computes the Levenshtein edit distance for sequences in seqs_mat indicated
-    by pairs of indices. Returns a vector of indices for seqs that were within the radius of
-    the query seq.
+#@nb.jit(nopython=True, parallel=True)
+def nb_running_editdistance(query_i, seqs_mat, seqs_L, radius, density_est=0.05, distance_matrix=identity_nb_distance_matrix, gap_penalty=1):
+    """Computes the Levenshtein edit distance between the query sequence and sequences in seqs_mat.
+    Returns a vector of positinal indices of seqs that were within the radius of the query seq and their edit distances.
 
     Parameters
     ----------
@@ -133,7 +153,14 @@ def nb_running_editdistance(query_i, seqs_mat, seqs_L, radius, density_est=0.1, 
         Matrix must match the alphabet that was used to create
         seqs_mat, where each AA is represented by an index into the alphabet.
     gap_penalty : int
-        Penalty for insertions and deletions in the optimal alignment."""
+        Penalty for insertions and deletions in the optimal alignment.
+
+    Returns
+    -------
+    indices : np.ndarray, dtype=np.uint32
+        Positional indices into seqs_mat of neighbors within radius R
+    nndists : np.ndarray, dtype=np.uint32
+        Distances to query seq of neighbors within radius R"""
 
     assert seqs_mat.shape[0] == seqs_L.shape[0]
     q_L = seqs_L[query_i]
@@ -144,6 +171,7 @@ def nb_running_editdistance(query_i, seqs_mat, seqs_L, radius, density_est=0.1, 
 
     neighbor_count = 0
     neighbors = np.zeros(chunk_sz, dtype=np.uint32)
+    nndists = np.zeros(chunk_sz, dtype=np.uint32)
 
     """As long as ldmat is big enough to accomodate the largest sequence
     its OK to only use part of it for the smaller sequences
@@ -166,9 +194,11 @@ def nb_running_editdistance(query_i, seqs_mat, seqs_L, radius, density_est=0.1, 
                 tmp_dist += distance_matrix[seqs_mat[query_i, i], seqs_mat[seq_i, i]]
             if tmp_dist <= radius:
                 neighbors[neighbor_count] = seq_i
+                nndists[neighbor_count] = tmp_dist
                 neighbor_count += 1
                 if neighbor_count >= neighbors.shape[0]:
                     neighbors = np.concatenate((neighbors, np.zeros(chunk_sz, dtype=np.uint32)))
+                    nndists = np.concatenate((nndists, np.zeros(chunk_sz, dtype=np.uint32)))
             continue
         elif tot_gap_penalty > radius:
             continue
@@ -193,8 +223,11 @@ def nb_running_editdistance(query_i, seqs_mat, seqs_L, radius, density_est=0.1, 
             if BREAK:
                 break
         if ldmat[row, col] <= radius:
+            """Means that the nested loops finished withour BREAKing"""
             neighbors[neighbor_count] = seq_i
+            nndists[neighbor_count] = ldmat[row, col]
             neighbor_count += 1
             if neighbor_count >= neighbors.shape[0]:
                 neighbors = np.concatenate((neighbors, np.zeros(chunk_sz, dtype=np.uint32)))
-    return neighbors[:neighbor_count]
+                nndists = np.concatenate((nndists, np.zeros(chunk_sz, dtype=np.uint32)))
+    return neighbors[:neighbor_count], nndists[:neighbor_count]

@@ -1,15 +1,15 @@
 import parasail
 import numpy as np
 import operator
-from .nb_metrics import nb_editdistance, nb_vector_editdistance, nb_tcrdist_distance, nb_vector_tcrdist_distance, nb_hamming_distance
+from .nb_metrics import nb_editdistance, nb_vector_editdistance, nb_tcrdist, nb_vector_tcrdist, nb_hamming_distance, nb_vector_hamming_distance
 
 __all__ = ['compute_many',
-           'compute_many_rect',
            'str_subst_metric',
            'hamming_distance',
            'nw_metric',
            'nw_hamming_metric',
            'nb_hamming_distance',
+           'nb_vector_hamming_distance',
            'nb_editdistance',
            'nb_vector_editdistance',
            'nb_tcrdist_distance',
@@ -18,8 +18,6 @@ __all__ = ['compute_many',
 def compute_many(indices, metric, seqs, dtype, **kwargs):
     return  np.array([metric(seqs[i], seqs[j], **kwargs) for i,j in indices], dtype=dtype)
 
-def compute_many_rect(indices, metric, seqs1, seqs2, dtype, **kwargs):
-    return np.array([metric(seqs1[i], seqs2[j], **kwargs) for i,j in indices], dtype=dtype)
 
 def _str_sim(s1, s2, subst, na_penalty):
     a = np.array([i for i in map(lambda a, b: subst.get((a, b), subst.get((b, a), na_penalty)), s1, s2)])
@@ -192,3 +190,6 @@ def _np_subst_metric(seq1, seq2, subst_mat, as_similarity=False):
         sim22 = np.sum(subst_mat[seq2, seq2])
         D = sim11 + sim22 - 2 * sim12
         return D
+
+def _compute_many_rect(indices, metric, seqs1, seqs2, dtype, **kwargs):
+    return np.array([metric(seqs1[i], seqs2[j], **kwargs) for i,j in indices], dtype=dtype)

@@ -4,16 +4,20 @@ import itertools
 import numba as nb
 
 
-__all__ = ['nb_distance_vec',
-           'nb_distance_rect']
+__all__ = ['nb_distance_vec']
 
-"""TODO:
- - Evaluate whether it makes a difference whether the distance function acts on one pair or a whole seqs_mat
- - Try using the vec versions of each function and write a sq and rect version of these functions to mirror pairwise?"""
 
-@nb.jit(nopython=True, parallel=False)
+@nb.jit(nopython=True, parallel=False, nogil=True)
 def nb_distance_vec(seqs_mat, seqs_L, indices, nb_metric, *args):
-    """
+    """Compute distances between pairs of sequences in seqs_mat specified by indices.
+
+    Note: numba raised errors when this function tried to use *args inside the prange
+    function. Without *args the prange function appears to fully parallelize the computation
+    but ultimately args were a requirement for functionality, so parallel = False.
+
+    Because these were not able to be parallelized by numba, they would need to be parallelized using
+    multi-processing (like the python metrics).
+
     Parameters
     ----------
     seqs_mat : np.ndarray dtype=int16 [nseqs, seq_length]
@@ -29,39 +33,12 @@ def nb_distance_vec(seqs_mat, seqs_L, indices, nb_metric, *args):
         two numpy vector representations of sequences and *args"""
 
     assert seqs_mat.shape[0] == seqs_L.shape[0]
-        
+    
     dist = np.zeros(indices.shape[0], dtype=np.int16)
     for ind_i in nb.prange(indices.shape[0]):
         dist[ind_i] = nb_metric(seqs_mat[indices[ind_i, 0], :seqs_L[indices[ind_i, 0]]],
                                 seqs_mat[indices[ind_i, 1], :seqs_L[indices[ind_i, 1]]], *args)
     return dist
-
-@nb.jit(nopython=True, parallel=False)
-def nb_distance_rect(seqs_mat1, seqs_L1, seqs_mat2, seqs_L2, indices, nb_metric, *args):
-    """Parameters
-    ----------
-    seqs_mat : np.ndarray dtype=int16 [nseqs, seq_length]
-        Created by pwsd.seqs2mat with padding to accomodate
-        sequences of different lengths (-1 padding)
-    seqs_L : np.ndarray [nseqs]
-        A vector containing the length of each sequence,
-        without the padding in seqs_mat
-    indices : np.ndarray [nseqs, 2]
-        Indices into seqs_mat1 and seqs_mat2 indicating pairs of sequences to compare.
-    nb_metric : nb.jitt'ed function
-        Any function that has been numba-compiled, taking
-        two numpy vector representations of sequences and *args"""
-
-    assert seqs_mat1.shape[0] == seqs_L1.shape[0]
-    assert seqs_mat2.shape[0] == seqs_L2.shape[0]
-        
-    dist = np.zeros(indices.shape[0], dtype=np.int16)
-    for ind_i in nb.prange(indices.shape[0]):
-        dist[ind_i] = nb_metric(seqs_mat1[indices[ind_i, 0], :seqs_L1[indices[ind_i, 0]]],
-                                seqs_mat2[indices[ind_i, 1], :seqs_L2[indices[ind_i, 1]]], *args)
-    return dist
-
-
 
 
 def _nb_pairwise_sq(seqs, nb_metric, *args):

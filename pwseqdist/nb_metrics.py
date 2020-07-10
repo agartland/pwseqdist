@@ -25,8 +25,31 @@ def nb_hamming_distance(vec1, vec2, check_lengths=True):
             tot += 1
     return tot
 
-@nb.jit(nopython=True, parallel=False, nogil=True)
 def nb_vector_hamming_distance(indices, seqs_mat, seqs_L, check_lengths=True):
+    """Computes the hamming distance for sequences in seqs_mat indicated by pairs of indices.
+
+    Note: this function is a wrapper of the numba function so that default arguments, and passing of
+    keyword arguments is supported.
+    
+    Parameters
+    ----------
+    indices : np.ndarray [nseqs, 2]
+        Indices into seqs_mat indicating pairs of sequences to compare.
+    seqs_mat : np.ndarray dtype=int16 [nseqs, seq_length]
+        Created by pwsd.seqs2mat with padding to accomodate
+        sequences of different lengths (-1 padding)
+    seqs_L : np.ndarray [nseqs]
+        A vector containing the length of each sequence,
+        without the padding in seqs_mat
+    
+    Returns
+    -------
+    dists : np.ndarray, dtype=np.int16
+        Vector of distances with length equal to indices.shape[0]"""
+    return _nb_vector_hamming_distance(indices, seqs_mat, seqs_L, check_lengths)
+
+@nb.jit(nopython=True, parallel=False, nogil=True)
+def _nb_vector_hamming_distance(indices, seqs_mat, seqs_L, check_lengths=True):
     dist = np.zeros(indices.shape[0], dtype=np.int16)
     for ind_i in nb.prange(indices.shape[0]):
         query_i = indices[ind_i, 0]
@@ -180,6 +203,9 @@ def nb_vector_tcrdist(indices, seqs_mat, seqs_L, distance_matrix=tcr_nb_distance
 
     Note: to use with non-CDR3 sequences set ntrim and ctrim to 0.
 
+    Note: this function is a wrapper of the numba function so that default arguments, and passing of
+    keyword arguments is supported.
+
     Parameters
     ----------
     indices : np.ndarray [nseqs, 2]
@@ -203,7 +229,12 @@ def nb_vector_tcrdist(indices, seqs_mat, seqs_L, distance_matrix=tcr_nb_distance
         in the distance calculation.
     fixed_gappos : bool
         If True, insert gaps at a fixed position after the cysteine residue statring the CDR3 (typically position 6).
-        If False, find the "optimal" position for inserting the gaps to make up the difference in length"""
+        If False, find the "optimal" position for inserting the gaps to make up the difference in length
+
+    Returns
+    -------
+    dists : np.ndarray, dtype=np.int16
+        Vector of distances with length equal to indices.shape[0]"""
 
     return _nb_vector_tcrdist(indices, seqs_mat, seqs_L, distance_matrix, dist_weight, gap_penalty, ntrim, ctrim, fixed_gappos)
 
@@ -265,6 +296,9 @@ def nb_vector_editdistance(indices, seqs_mat, seqs_L, distance_matrix=identity_n
     """Computes the Levenshtein edit distance for sequences in seqs_mat indicated
     by pairs of indices.
 
+    Note: this function is a wrapper of the numba function so that default arguments, and passing of
+    keyword arguments is supported.
+
     Parameters
     ----------
     indices : np.ndarray [nseqs, 2]
@@ -280,7 +314,15 @@ def nb_vector_editdistance(indices, seqs_mat, seqs_L, distance_matrix=identity_n
         Matrix must match the alphabet that was used to create
         seqs_mat, where each AA is represented by an index into the alphabet.
     gap_penalty : int
-        Penalty for insertions and deletions in the optimal alignment."""
+        Penalty for insertions and deletions in the optimal alignment.
+
+    Returns
+    -------
+    dists : np.ndarray, dtype=np.int16
+        Vector of distances with length equal to indices.shape[0]"""
+    #print(indices.shape)
+    #print(seqs_mat.shape)
+    #print(seqs_L.shape)
     return _nb_vector_editdistance(indices, seqs_mat, seqs_L, distance_matrix, gap_penalty)
 
 @nb.jit(nopython=True, parallel=False, nogil=True)

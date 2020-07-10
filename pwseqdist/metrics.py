@@ -18,7 +18,6 @@ __all__ = ['compute_many',
 def compute_many(indices, metric, seqs, dtype, **kwargs):
     return  np.array([metric(seqs[i], seqs[j], **kwargs) for i,j in indices], dtype=dtype)
 
-
 def _str_sim(s1, s2, subst, na_penalty):
     a = np.array([i for i in map(lambda a, b: subst.get((a, b), subst.get((b, a), na_penalty)), s1, s2)])
     return np.sum(a)

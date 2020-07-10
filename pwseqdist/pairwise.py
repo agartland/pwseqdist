@@ -13,7 +13,8 @@ from .numba_tools import nb_distance_vec
 from .matrices import seqs2mat
 
 __all__ = ['apply_pairwise_rect',
-           'apply_pairwise_sparse']
+           'apply_pairwise_sparse',
+           'apply_running_rect']
 
 """TODO:
 Currently I pass all the sequences and some set of indices to compute_many. 
@@ -24,7 +25,7 @@ total number of sequences that are needed and then sending just those and
 translated indices."""
 
 
-def apply_pairwise_rect(metric, seqs1, seqs2=None, ncpus=1, use_numba=False, uniqify=True, numba_args=(), **kwargs):
+def apply_pairwise_rect(metric, seqs1, *args, seqs2=None, ncpus=1, use_numba=False, uniqify=True, **kwargs):
     """Calculate distance between pairs of sequences in seqs1
     with sequences in seqs2 using metric and kwargs provided to
     metric.
@@ -62,20 +63,13 @@ def apply_pairwise_rect(metric, seqs1, seqs2=None, ncpus=1, use_numba=False, uni
         has been compiled with parallel=True.
     uniqify : bool
         Indicates whether only unique sequences should be analyzed.
-    **kwargs : keyword arguments
-        Additional keyword arguments are supplied to the metric.
-        Kwargs are not provided to numba-compiled metrics; use numba_args.
-    *numba_args : non-keyword arguments
-        These are provided to numba-compiled metrics which do not
-        accept kwargs. Use kwargs for non-numba metrics.
+    *args, **kwargs : additional arguments
+        Additional positional/keyword arguments supplied to the metric.
 
     Returns
     -------
-    dvec : np.ndarray, length len(seqs1) * len(seqs2)
-        Vector form of the pairwise distance rectangle.
-    indices : np.ndarray, shape [len(seqs1) * len(seqs2), 2]
-        Contains i,j indices on each row where i (j) is an index
-        into seqs1 (seqs2) and can be used to recreate a distance rectangle"""
+    dmat : np.ndarray, length len(seqs1) * len(seqs2)
+        Matrix of the pairwise distance rectangle."""
 
     useqs1, seqs1_uind = np.unique(seqs1, return_inverse=True)
     if len(useqs1) == len(seqs1) or not uniqify:
@@ -103,7 +97,7 @@ def apply_pairwise_rect(metric, seqs1, seqs2=None, ncpus=1, use_numba=False, uni
         pw_indices = list(itertools.combinations(range(len(useqs)), 2))
 
     chunk_func = lambda l, n: [l[i:i + n] for i in range(0, len(l), n)]
-    chunksz = len(pw_indices) // ncpus
+    chunksz = max(len(pw_indices) // ncpus, 1)
     """Chunked indices is a list of lists of indices"""
     chunked_indices = chunk_func(pw_indices, chunksz)
     
@@ -120,16 +114,17 @@ def apply_pairwise_rect(metric, seqs1, seqs2=None, ncpus=1, use_numba=False, uni
                                        metric,
                                        useqs,
                                        dtype,
+                                       *args,
                                        **kwargs,
                                        pm_parallel=True,
                                        pm_pool=pool)
                 urect = np.concatenate(dists)
             except ValueError as err:
                 print('pwseqdist.apply_pairwise_rect: error with metric %s and multiprocessing, trying on single core' % metric)
-                urect = compute_many(pw_indices, metric, useqs, dtype, **kwargs)
+                urect = compute_many(pw_indices, metric, useqs, dtype, *args, **kwargs)
                 print('pwseqdist.apply_pairwise_rect: metric %s could not be spread to multiple processes, ran on single core' % metric)
         else:
-            urect = compute_many(pw_indices, metric, useqs, dtype, **kwargs)
+            urect = compute_many(pw_indices, metric, useqs, dtype, *args, **kwargs)
 
     else:
         if ncpus > 1:
@@ -144,7 +139,8 @@ def apply_pairwise_rect(metric, seqs1, seqs2=None, ncpus=1, use_numba=False, uni
                                    chunked_indices,
                                    seqs_mat,
                                    seqs_L,
-                                   *numba_args,
+                                   *args,
+                                   **kwargs,
                                    pm_parallel=True,
                                    pm_pool=pool)
             urect = np.concatenate(dists)
@@ -158,7 +154,7 @@ def apply_pairwise_rect(metric, seqs1, seqs2=None, ncpus=1, use_numba=False, uni
             
             """Second one here requires passing the standard metric, while the first requires
             passing the "vector" metric. Speed is quite comparable"""
-            urect = metric(pw_indices, seqs_mat, seqs_L, *numba_args)
+            urect = metric(pw_indices, seqs_mat, seqs_L, *args, **kwargs)
             # urect = nb_distance_vec(seqs_mat, seqs_L, pw_indices, metric, *numba_args)
 
     if seqs2 is None:
@@ -174,7 +170,7 @@ def apply_pairwise_rect(metric, seqs1, seqs2=None, ncpus=1, use_numba=False, uni
             urect = urect[:, seqs2_uind]
     return urect
 
-def apply_pairwise_sparse(metric, seqs, pairs, ncpus=1, use_numba=False, numba_args=(), **kwargs):
+def apply_pairwise_sparse(metric, seqs, pairs, *args, ncpus=1, use_numba=False, **kwargs):
     """Calculate distance between pairs of sequences in seqs using metric and kwargs
     provided to metric. Will only compute distances specified in pairs of indices in pairs.
     Results could be used to create a sparse matrix of pairwise distances.
@@ -202,12 +198,8 @@ def apply_pairwise_sparse(metric, seqs, pairs, ncpus=1, use_numba=False, numba_a
     use_numba : bool
         Use a numba-compiled metric
         For numba, ncpus is ignored
-    **kwargs : keyword arguments
-        Additional keyword arguments are supplied to the metric.
-        Kwargs are not provided to numba-compiled metrics; use numba_args.
-    *numba_args : non-keyword arguments
-        These are provided to numba-compiled metrics which do not
-        accept kwargs. Use kwargs for non-numba metrics.
+    *args, **kwargs : additional arguments
+        Additional positional/keyword arguments supplied to the metric.
 
     Returns
     -------
@@ -215,7 +207,7 @@ def apply_pairwise_sparse(metric, seqs, pairs, ncpus=1, use_numba=False, numba_a
         Vector of distances for each pair of indices in pairs"""
     
     chunk_func = lambda l, n: [l[i:i + n] for i in range(0, len(l), n)]
-    chunksz = len(pairs)//ncpus
+    chunksz = max(len(pairs) // ncpus, 1)
     chunked_indices = chunk_func(pairs, chunksz)
     if not use_numba:
         dtype = type(metric(seqs[0], seqs[0], **kwargs))
@@ -228,16 +220,17 @@ def apply_pairwise_sparse(metric, seqs, pairs, ncpus=1, use_numba=False, numba_a
                                        metric,
                                        seqs,
                                        dtype,
+                                       *args,
                                        **kwargs,
                                        pm_parallel=True,
                                        pm_pool=pool)
                     vec = np.concatenate(dists)
                 except ValueError as err:
                     print('pwseqdist.apply_pairwise_sparse: error with metric %s and multiprocessing, trying on single core' % metric)
-                    urect = compute_many(pairs, metric, seqs, dtype, **kwargs)
+                    urect = compute_many(pairs, metric, seqs, dtype, *args, **kwargs)
                     print('pwseqdist.apply_pairwise_sparse: metric %s could not be spread to multiple processes, ran on single core' % metric)
         else:
-            vec = compute_many(pairs, metric, seqs, dtype, **kwargs)
+            vec = compute_many(pairs, metric, seqs, dtype, *args, **kwargs)
         
     else:
         if ncpus > 1:
@@ -251,7 +244,8 @@ def apply_pairwise_sparse(metric, seqs, pairs, ncpus=1, use_numba=False, numba_a
                                    chunked_indices,
                                    seqs_mat,
                                    seqs_L,
-                                   *numba_args,
+                                   *args,
+                                   **kwargs,
                                    pm_parallel=True,
                                    pm_pool=pool)
             vec = np.concatenate(dists)
@@ -265,9 +259,71 @@ def apply_pairwise_sparse(metric, seqs, pairs, ncpus=1, use_numba=False, numba_a
             
             """Second one here requires passing the standard metric, while the first requires
             passing the "vector" metric. Speed is quite comparable"""
-            vec = metric(pw_indices, seqs_mat, seqs_L, *numba_args)
+            vec = metric(pw_indices, seqs_mat, seqs_L, *args, **kwargs)
             # urect = nb_distance_vec(seqs_mat, seqs_L, pw_indices, metric, *numba_args)
     return vec
+
+def apply_running_rect(metric, seqs1, seqs2, radius, density_est, *args, ncpus=1, uniqify=True, **kwargs):
+    """Compute distances between seqs in seqs1 and seqs in seqs2 but only return
+    the indices into seqs2 for each seqs1 when the distance < radius.
+
+    Parameters
+    ----------
+    metric : function
+        A "running" distance function, e.g. pwsd.running.nb_running_tcrdist
+    seqs1, seqs2 : lists
+        Lists of sequences with seqs1 ideally being shorter
+    ncpus : int
+        Size of the worker pool to be used by multiprocessing
+    uniqify : bool
+        Indicates whether only unique sequences in seqs1 should be analyzed.
+    *args, **kwargs : additional arguments for the metric
+        
+    Returns
+    -------
+    res : list of (indices, dvec) np.ndarrays of equal length
+        indices : np.ndarray
+            List (i) of length seqs1 with indices (j) into seqs2 with D(seqs1_i|seqs2_j) < radius
+        dvec : np.ndarray
+            Vector of distances with radius < R"""
+
+    useqs1, seqs1_uind = np.unique(seqs1, return_inverse=True)
+    if len(useqs1) == len(seqs1) or not uniqify:
+        useqs1 = seqs1
+        translate1 = False
+    else:
+        translate1 = True
+
+    # nb_running_x(query_i, seqs_mat, seqs_L, radius, density_est=0.05, *args)
+
+    seqs_mat, seqs_L = seqs2mat(useqs1 + seqs2)
+    n1 = len(useqs1)
+
+    query_indices = range(n1)
+    if ncpus > 1:
+        with multiprocessing.Pool(ncpus) as pool:
+            res = parmap.map(metric,
+                               query_indices,
+                               seqs_mat,
+                               seqs_L,
+                               radius,
+                               density_est,
+                               *args,
+                               **kwargs,
+                               pm_parallel=True,
+                               pm_pool=pool)
+        
+    else:
+        res = [metric(query_i, seqs_mat, seqs_L, radius, density_est, **kwargs) for query_i in query_indices]
+        
+    """Subtract off the n1 seqs from useqs1"""
+    if translate1:
+        """Re-expand seqs1"""
+        res = [(res[res_i][0][res[res_i][0] >= n1] - n1, res[res_i][1][res[res_i][0] >= n1]) for resi in seqs1_uind]
+    else:
+        res = [(ind[ind >= n1] - n1, d[ind >= n1]) for ind, d in res]
+
+    return res
 
 
 def _apply_pairwise_sq(seqs, metric, ncpus=1, use_numba=False, uniqify=True, numba_args=(), **kwargs):

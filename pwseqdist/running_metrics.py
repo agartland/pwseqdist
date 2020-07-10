@@ -14,8 +14,6 @@ __all__ = ['nb_running_editdistance',
  for multiple query sequences spread to multiple CPUs using multiprocessing,
  or ideally multithreading with shared seqs_mat memory, since numba can release the GIL"""
 
-
-@nb.jit(nopython=True, parallel=False)
 def nb_running_tcrdist(query_i, seqs_mat, seqs_L, radius, density_est=0.05, distance_matrix=tcr_nb_distance_matrix, dist_weight=3, gap_penalty=4, ntrim=3, ctrim=2, fixed_gappos=True):
     """Compute "tcrdist" distance between two TCR CDR3 sequences. Using default weight, gap penalty, ntrim and ctrim is equivalent to the
     original distance published in Dash et al, (2017). By setting ntrim and ctrim to 0 and adjusting the dist_weight, it is also possible
@@ -59,6 +57,10 @@ def nb_running_tcrdist(query_i, seqs_mat, seqs_L, radius, density_est=0.05, dist
         Positional indices into seqs_mat of neighbors within radius R
     nndists : np.ndarray, dtype=np.uint32
         Distances to query seq of neighbors within radius R"""
+    return _nb_running_tcrdist(query_i, seqs_mat, seqs_L, radius, density_est, distance_matrix, dist_weight, gap_penalty, ntrim, ctrim, fixed_gappos)
+
+@nb.jit(nopython=True, parallel=False)
+def _nb_running_tcrdist(query_i, seqs_mat, seqs_L, radius, density_est=0.05, distance_matrix=tcr_nb_distance_matrix, dist_weight=3, gap_penalty=4, ntrim=3, ctrim=2, fixed_gappos=True):
     assert seqs_mat.shape[0] == seqs_L.shape[0]
 
     """Chunk size for allocating array space to hold neighbors: should be a minimum of 100 and a max of seqs_mat.shape[0]"""
@@ -67,7 +69,7 @@ def nb_running_tcrdist(query_i, seqs_mat, seqs_L, radius, density_est=0.05, dist
     q_L = seqs_L[query_i]
     neighbor_count = 0
     neighbors = np.zeros(chunk_sz, dtype=np.uint32)
-    nndists = np.zeros(chunk_sz, dtype=np.uint32)
+    nndists = np.zeros(chunk_sz, dtype=np.int16)
     for seq_i in range(seqs_mat.shape[0]):
         s_L = seqs_L[seq_i]
         short_len = min(q_L, s_L)
@@ -87,9 +89,12 @@ def nb_running_tcrdist(query_i, seqs_mat, seqs_L, radius, density_est=0.05, dist
                 neighbor_count += 1
                 if neighbor_count >= neighbors.shape[0]:
                     neighbors = np.concatenate((neighbors, np.zeros(chunk_sz, dtype=np.uint32)))
-                    nndists = np.concatenate((nndists, np.zeros(chunk_sz, dtype=np.uint32)))
+                    nndists = np.concatenate((nndists, np.zeros(chunk_sz, dtype=np.int16)))
+                continue
+            #print(f'quiting1 on {seq_i}: dist={tmp_dist * dist_weight}')
             continue
         elif tot_gap_penalty > radius:
+            #print(f'quiting2 on {seq_i}: gap_penalty={tot_gap_penalty}')
             continue
         
         if fixed_gappos:
@@ -110,6 +115,8 @@ def nb_running_tcrdist(query_i, seqs_mat, seqs_L, radius, density_est=0.05, dist
                 """n_i refers to position relative to N term"""
                 tmp_dist += distance_matrix[seqs_mat[query_i, n_i], seqs_mat[seq_i, n_i]]
             if tmp_dist * dist_weight + tot_gap_penalty > radius:
+                #print(f'quiting3 on {seq_i}: dist={tmp_dist * dist_weight + tot_gap_penalty}')
+                min_dist = tmp_dist
                 continue
             for c_i in range(ctrim, remainder):
                 """c_i refers to position relative to C term, counting upwards from C term"""
@@ -125,12 +132,12 @@ def nb_running_tcrdist(query_i, seqs_mat, seqs_L, radius, density_est=0.05, dist
             neighbor_count += 1
             if neighbor_count >= neighbors.shape[0]:
                 neighbors = np.concatenate((neighbors, np.zeros(chunk_sz, dtype=np.uint32)))
-                nndists = np.concatenate((nndists, np.zeros(chunk_sz, dtype=np.uint32)))
-        
+                nndists = np.concatenate((nndists, np.zeros(chunk_sz, dtype=np.int16)))
+        else:
+            #print(f'quiting4 on {seq_i}: dist={tot_distance}')
+            pass
     return neighbors[:neighbor_count], nndists[:neighbor_count]
 
-
-@nb.jit(nopython=True, parallel=False)
 def nb_running_editdistance(query_i, seqs_mat, seqs_L, radius, density_est=0.05, distance_matrix=identity_nb_distance_matrix, gap_penalty=1):
     """Computes the Levenshtein edit distance between the query sequence and sequences in seqs_mat.
     Returns a vector of positinal indices of seqs that were within the radius of the query seq and their edit distances.
@@ -163,7 +170,10 @@ def nb_running_editdistance(query_i, seqs_mat, seqs_L, radius, density_est=0.05,
         Positional indices into seqs_mat of neighbors within radius R
     nndists : np.ndarray, dtype=np.uint32
         Distances to query seq of neighbors within radius R"""
+    return _nb_running_editdistance(query_i, seqs_mat, seqs_L, radius, density_est, distance_matrix, gap_penalty)    
 
+@nb.jit(nopython=True, parallel=False)
+def _nb_running_editdistance(query_i, seqs_mat, seqs_L, radius, density_est=0.05, distance_matrix=identity_nb_distance_matrix, gap_penalty=1):
     assert seqs_mat.shape[0] == seqs_L.shape[0]
     q_L = seqs_L[query_i]
     mx_L = np.max(seqs_L)
@@ -173,12 +183,12 @@ def nb_running_editdistance(query_i, seqs_mat, seqs_L, radius, density_est=0.05,
 
     neighbor_count = 0
     neighbors = np.zeros(chunk_sz, dtype=np.uint32)
-    nndists = np.zeros(chunk_sz, dtype=np.uint32)
+    nndists = np.zeros(chunk_sz, dtype=np.int16)
 
     """As long as ldmat is big enough to accomodate the largest sequence
     its OK to only use part of it for the smaller sequences
     NOTE that to create a 2D array it must be created 1D anfd reshaped"""
-    ldmat = np.zeros(q_L * mx_L, dtype=np.int16).reshape((q_L, mx_L))
+    ldmat = np.zeros(nb.int_(q_L) * nb.int_(mx_L), dtype=np.int16).reshape((q_L, mx_L))
     for seq_i in range(seqs_mat.shape[0]):
         # query_i = indices[ind_i, 0]
         # seq_i = indices[ind_i, 1]
@@ -200,9 +210,11 @@ def nb_running_editdistance(query_i, seqs_mat, seqs_L, radius, density_est=0.05,
                 neighbor_count += 1
                 if neighbor_count >= neighbors.shape[0]:
                     neighbors = np.concatenate((neighbors, np.zeros(chunk_sz, dtype=np.uint32)))
-                    nndists = np.concatenate((nndists, np.zeros(chunk_sz, dtype=np.uint32)))
+                    nndists = np.concatenate((nndists, np.zeros(chunk_sz, dtype=np.int16)))
+            #print(f'quiting1 on {seq_i}: dist={tmp_dist}')
             continue
         elif tot_gap_penalty > radius:
+            #print(f'quiting2 on {seq_i}: gap_penalty={tot_gap_penalty}')
             continue
     
         """Do not need to re-zero each time"""
@@ -213,17 +225,13 @@ def nb_running_editdistance(query_i, seqs_mat, seqs_L, radius, density_est=0.05,
         for col in range(1, s_L):
             ldmat[0, col] = col * gap_penalty
             
-        BREAK = False
+
         for col in range(1, s_L):
             for row in range(1, q_L):
                 ldmat[row, col] = min(ldmat[row-1, col] + gap_penalty,
                                      ldmat[row, col-1] + gap_penalty,
                                      ldmat[row-1, col-1] + distance_matrix[seqs_mat[query_i, row-1], seqs_mat[seq_i, col-1]]) # substitution
-                if ldmat[row, col] > radius:
-                    BREAK = True
-                    break
-            if BREAK:
-                break
+
         if ldmat[row, col] <= radius:
             """Means that the nested loops finished withour BREAKing"""
             neighbors[neighbor_count] = seq_i
@@ -231,5 +239,8 @@ def nb_running_editdistance(query_i, seqs_mat, seqs_L, radius, density_est=0.05,
             neighbor_count += 1
             if neighbor_count >= neighbors.shape[0]:
                 neighbors = np.concatenate((neighbors, np.zeros(chunk_sz, dtype=np.uint32)))
-                nndists = np.concatenate((nndists, np.zeros(chunk_sz, dtype=np.uint32)))
+                nndists = np.concatenate((nndists, np.zeros(chunk_sz, dtype=np.int16)))
+        else:
+            pass
+            #print(f'quiting3 on {seq_i}: dist={ldmat[row, col]}')
     return neighbors[:neighbor_count], nndists[:neighbor_count]

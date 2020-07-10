@@ -215,7 +215,7 @@ def get_kwargs_str(kwargs):
     return kwargs_str
 
 if __name__ == '__main__':
-    test_nb_pw_rect()
+    #test_nb_pw_rect()
     #test_benchmark_running(rapid_test=True)
     #test_benchmark_metrics(rapid_test=True)
     #test_benchmark_pairwise_rect(rapid_test=True)

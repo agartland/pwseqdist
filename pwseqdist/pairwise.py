@@ -127,25 +127,10 @@ def apply_pairwise_rect(metric, seqs1, seqs2=None, ncpus=1, use_numba=False, uni
             except ValueError as err:
                 print('pwseqdist.apply_pairwise_rect: error with metric %s and multiprocessing, trying on single core' % metric)
                 urect = compute_many(pw_indices, metric, useqs, dtype, **kwargs)
-                """dists = parmap.map(compute_many,
-                                   chunked_indices,
-                                   metric,
-                                   useqs,
-                                   dtype,
-                                   **kwargs,
-                                   pm_parallel=False)"""
                 print('pwseqdist.apply_pairwise_rect: metric %s could not be spread to multiple processes, ran on single core' % metric)
-
         else:
             urect = compute_many(pw_indices, metric, useqs, dtype, **kwargs)
-            """dists = parmap.map(compute_many,
-                                   chunked_indices,
-                                   metric,
-                                   useqs,
-                                   dtype,
-                                   **kwargs,
-                                   pm_parallel=False)"""
-        
+
     else:
         if ncpus > 1:
             """Now a list of the chunked [chunksz x 2] arrays"""

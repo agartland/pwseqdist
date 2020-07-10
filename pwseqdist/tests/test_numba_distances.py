@@ -12,8 +12,7 @@ from os.path import join as opj
 import editdistance
 import stringdist
 
-from fg_shared import *
-
+# from fg_shared import *
 # sys.path.append(opj(_git, 'pwseqdist'))
 import pwseqdist as pwsd
 

@@ -30,7 +30,7 @@ def apply_pairwise_rect(metric, seqs1, *args, seqs2=None, ncpus=1, use_numba=Fal
     with sequences in seqs2 using metric and kwargs provided to
     metric.
 
-    Can provide a number compiled metric to increase speed. Note that the numba metric should accept a different
+    Can provide a numba compiled metric to increase speed. Note that the numba metric should accept a different
     set of inputs (see metric parameter below, e.g. pwsd.metrics.nb_vector_editdistance)
 
     Will use multiprocessing Pool if ncpus > 1. With numba metrics, multiprocessing will probably not lead to reduced
@@ -59,8 +59,6 @@ def apply_pairwise_rect(metric, seqs1, *args, seqs2=None, ncpus=1, use_numba=Fal
         Size of the worker pool to be used by multiprocessing
     use_numba : bool
         Use a numba-compiled metric
-        For numba, ncpus is ignored because the loop
-        has been compiled with parallel=True.
     uniqify : bool
         Indicates whether only unique sequences should be analyzed.
     *args, **kwargs : additional arguments

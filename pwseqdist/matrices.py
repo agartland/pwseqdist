@@ -21,7 +21,7 @@ parasail_aa_alphabet = 'ARNDCQEGHILKMFPSTWYVBZX'
 """Used for reconstruction of sequences from number representation"""
 parasail_aa_alphabet_with_unknown = 'ARNDCQEGHILKMFPSTWYVBZX*'
 
-identity_nb_distance_matrix = np.ones((len(parasail_aa_alphabet), len(parasail_aa_alphabet)), dtype=np.int32)
+identity_nb_distance_matrix = np.ones((len(parasail_aa_alphabet_with_unknown), len(parasail_aa_alphabet_with_unknown)), dtype=np.int32)
 identity_nb_distance_matrix[np.diag_indices_from(identity_nb_distance_matrix)] = 0
 
 
@@ -209,7 +209,7 @@ def vec2seq(vec, alphabet=parasail_aa_alphabet_with_unknown, unknown='X'):
         seq =  ''.join([alphabet[aai] if aai < len(alphabet) else unknown for aai in vec])
     return seq
 
-def seqs2mat(seqs, alphabet=parasail_aa_alphabet_with_unknown, max_len=None):
+def seqs2mat(seqs, alphabet=parasail_aa_alphabet, max_len=None):
     """Convert a collection of AA sequences into a
     numpy matrix of integers for fast comparison.
 

@@ -9,8 +9,8 @@ import parmap
 # import concurrent.futures
 
 from .metrics import compute_many
-from .numba_tools import nb_distance_vec
-from .matrices import seqs2mat
+# from .numba_tools import nb_distance_vec
+from .matrices import seqs2mat, parasail_aa_alphabet
 
 __all__ = ['apply_pairwise_rect',
            'apply_pairwise_sparse',
@@ -25,7 +25,7 @@ total number of sequences that are needed and then sending just those and
 translated indices."""
 
 
-def apply_pairwise_rect(metric, seqs1, *args, seqs2=None, ncpus=1, use_numba=False, uniqify=True, **kwargs):
+def apply_pairwise_rect(metric, seqs1, *args, seqs2=None, ncpus=1, use_numba=False, uniqify=True, alphabet=parasail_aa_alphabet, **kwargs):
     """Calculate distance between pairs of sequences in seqs1
     with sequences in seqs2 using metric and kwargs provided to
     metric.
@@ -125,10 +125,11 @@ def apply_pairwise_rect(metric, seqs1, *args, seqs2=None, ncpus=1, use_numba=Fal
             urect = compute_many(pw_indices, metric, useqs, dtype, *args, **kwargs)
 
     else:
+        seqs_mat, seqs_L = seqs2mat(useqs, alphabet=alphabet)
+
         if ncpus > 1:
             """Now a list of the chunked [chunksz x 2] arrays"""
             chunked_indices = [np.array(i, dtype=np.int64) for i in chunked_indices]
-            seqs_mat, seqs_L = seqs2mat(useqs)
             
             # , prefer='threads', require='sharedmem'
             # dists = Parallel(n_jobs=ncpus)(delayed(metric)(pw_i, seqs_mat, seqs_L, *numba_args) for pw_i in chunked_indices)
@@ -144,8 +145,7 @@ def apply_pairwise_rect(metric, seqs1, *args, seqs2=None, ncpus=1, use_numba=Fal
             urect = np.concatenate(dists)
         else:
             pw_indices = np.array(pw_indices, dtype=np.int64)
-            seqs_mat, seqs_L = seqs2mat(useqs)
-
+            
             """Not neccessary because metric should be pre-jitted. This allowed for changing parallel
             programatically, but this ended up not being helpful for speed"""
             # nb_metric = nb.jit(metric, nopython=True, parallel=ncpus > 1, nogil=True)
@@ -168,7 +168,7 @@ def apply_pairwise_rect(metric, seqs1, *args, seqs2=None, ncpus=1, use_numba=Fal
             urect = urect[:, seqs2_uind]
     return urect
 
-def apply_pairwise_sparse(metric, seqs, pairs, *args, ncpus=1, use_numba=False, **kwargs):
+def apply_pairwise_sparse(metric, seqs, pairs, *args, ncpus=1, use_numba=False, alphabet=parasail_aa_alphabet, **kwargs):
     """Calculate distance between pairs of sequences in seqs using metric and kwargs
     provided to metric. Will only compute distances specified in pairs of indices in pairs.
     Results could be used to create a sparse matrix of pairwise distances.
@@ -234,7 +234,7 @@ def apply_pairwise_sparse(metric, seqs, pairs, *args, ncpus=1, use_numba=False, 
         if ncpus > 1:
             """Now a list of the chunked [chunksz x 2] arrays"""
             chunked_indices = [np.array(i, dtype=np.int64) for i in chunked_indices]
-            seqs_mat, seqs_L = seqs2mat(seqs)
+            seqs_mat, seqs_L = seqs2mat(seqs, alphabet=alphabet)
             
             # dists = Parallel(n_jobs=ncpus)(delayed(metric)(pw_i, seqs_mat, seqs_L, *numba_args) for pw_i in chunked_indices)
             with multiprocessing.Pool(ncpus) as pool:
@@ -249,7 +249,7 @@ def apply_pairwise_sparse(metric, seqs, pairs, *args, ncpus=1, use_numba=False, 
             vec = np.concatenate(dists)
         else:
             pw_indices = np.array(pairs, dtype=np.int64)
-            seqs_mat, seqs_L = seqs2mat(seqs)
+            seqs_mat, seqs_L = seqs2mat(seqs, alphabet=alphabet)
 
             """Not neccessary because metric should be pre-jitted. This allowed for changing parallel
             programatically, but this ended up not being helpful for speed"""
@@ -261,7 +261,7 @@ def apply_pairwise_sparse(metric, seqs, pairs, *args, ncpus=1, use_numba=False, 
             # urect = nb_distance_vec(seqs_mat, seqs_L, pw_indices, metric, *numba_args)
     return vec
 
-def apply_running_rect(metric, seqs1, seqs2, radius, density_est, *args, ncpus=1, uniqify=True, **kwargs):
+def apply_running_rect(metric, seqs1, seqs2, radius, density_est, *args, ncpus=1, uniqify=True, alphabet=parasail_aa_alphabet, **kwargs):
     """Compute distances between seqs in seqs1 and seqs in seqs2 but only return
     the indices into seqs2 for each seqs1 when the distance < radius.
 
@@ -294,7 +294,7 @@ def apply_running_rect(metric, seqs1, seqs2, radius, density_est, *args, ncpus=1
 
     # nb_running_x(query_i, seqs_mat, seqs_L, radius, density_est=0.05, *args)
 
-    seqs_mat, seqs_L = seqs2mat(useqs1 + seqs2)
+    seqs_mat, seqs_L = seqs2mat(useqs1 + seqs2, alphabet=alphabet)
     n1 = len(useqs1)
 
     query_indices = range(n1)
@@ -324,7 +324,7 @@ def apply_running_rect(metric, seqs1, seqs2, radius, density_est, *args, ncpus=1
     return res
 
 
-def _apply_pairwise_sq(seqs, metric, ncpus=1, use_numba=False, uniqify=True, numba_args=(), **kwargs):
+def _apply_pairwise_sq(seqs, metric, ncpus=1, use_numba=False, uniqify=True, numba_args=(), alphabet=parasail_aa_alphabet, **kwargs):
     """Calculate distance between all pairs of seqs using metric
     and kwargs provided to metric. Will use multiprocessing Pool
     if ncpus > 1.
@@ -420,7 +420,7 @@ def _apply_pairwise_sq(seqs, metric, ncpus=1, use_numba=False, uniqify=True, num
         uvec = np.concatenate(dists) # this may be more memory intensive, but should be fine
     else:
         pw_indices = np.array(pw_indices, dtype=np.int64)
-        seqs_mat, seqs_L = seqs2mat(useqs)
+        seqs_mat, seqs_L = seqs2mat(useqs, alphabet=alphabet)
         """Not neccessary because metric should be pre-jitted. This allowed for changing parallel
         programatically, but this ended up not being helpful for speed"""
         # nb_metric = nb.jit(metric, nopython=True, parallel=ncpus > 1, nogil=True)

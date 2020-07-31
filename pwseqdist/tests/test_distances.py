@@ -63,6 +63,21 @@ mixed_seqs = ['CACADLGAYPDKLIF',
 
 seqs = [s[:10] for s in mixed_seqs]
 
+class TestUnknownSymbols(unittest.TestCase):
+    def test_unknowns_metric(self):
+        seqs_dot = ['CACADLGAYPDKLIF',
+                 'CACDALLAYTDKLIF',
+                 'CACDAV...LDKLIF',
+                 'CACDDVTEVEGDKLIF',
+                 'CACDFISPSNWGIQSGRNTDKLIF']*100
+        drect_dots2 = pwsd.apply_pairwise_rect(pwsd.metrics.nb_vector_tcrdist, seqs1=seqs_dot, seqs2=None, use_numba=True, ncpus=2, uniqify=False)
+        drect_dots1 = pwsd.apply_pairwise_rect(pwsd.metrics.nb_vector_tcrdist, seqs1=seqs_dot, seqs2=None, use_numba=True, ncpus=1, uniqify=False)
+
+        #print()
+        #print(drect_dots1)
+        #print(drect_dots2)
+        self.assertTrue((drect_dots1 == drect_dots2).all())
+
 class TestDistances(unittest.TestCase):
     
     def test_haming_metric(self):

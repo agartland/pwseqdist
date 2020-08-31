@@ -30,6 +30,11 @@ def apply_pairwise_rect(metric, seqs1, *args, seqs2=None, ncpus=1, use_numba=Fal
     with sequences in seqs2 using metric and kwargs provided to
     metric.
 
+    When seqs2=None, a square matrix of pairwise distances is computed among all seqs in seqs1.
+    However, it is assumed that the diagonal (ie dist(seq_a, seqs_a)) is always zero and that
+    the metric is symetric. If this may not be true, provide the same set of seqs as
+    seqs1 and seqs2 to get the fully computed square pairwise matrix.
+
     Can provide a numba compiled metric to increase speed. Note that the numba metric should accept a different
     set of inputs (see metric parameter below, e.g. pwsd.metrics.nb_vector_editdistance)
 
@@ -92,7 +97,14 @@ def apply_pairwise_rect(metric, seqs1, *args, seqs2=None, ncpus=1, use_numba=Fal
         pw_indices = list(itertools.product(range(len(useqs1)), range(len(useqs1), len(useqs2) + len(useqs1))))
     else:
         useqs = useqs1
-        pw_indices = list(itertools.combinations(range(len(useqs)), 2))
+        if len(useqs) == 1:
+            """Only one unique sequence (this is only a problem when seqs2=None"""
+            urect = np.zeros((1, 1))
+            if translate1:
+                urect = urect[seqs1_uind, :][:, seqs1_uind]
+            return urect
+        else:
+            pw_indices = list(itertools.combinations(range(len(useqs)), 2))
 
     chunk_func = lambda l, n: [l[i:i + n] for i in range(0, len(l), n)]
     chunksz = max(len(pw_indices) // ncpus, 1)
@@ -156,7 +168,7 @@ def apply_pairwise_rect(metric, seqs1, *args, seqs2=None, ncpus=1, use_numba=Fal
             # urect = nb_distance_vec(seqs_mat, seqs_L, pw_indices, metric, *numba_args)
 
     if seqs2 is None:
-        urect = scipy.spatial.distance.squareform(urect)
+        urect = scipy.spatial.distance.squareform(urect, force='tomatrix')
         if translate1:
             urect = urect[seqs1_uind, :][:, seqs1_uind]
     else:

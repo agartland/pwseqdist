@@ -89,10 +89,7 @@ def apply_pairwise_rect(metric, seqs1, *args, seqs2=None, ncpus=1, use_numba=Fal
         else:
             translate2 = True
 
-        if not uniqify or (not translate1 and not translate2):
-            useqs = useqs1 + useqs2
-        else:
-            useqs = np.concatenate((useqs1, useqs2))
+        useqs = np.concatenate((useqs1, useqs2))
 
         pw_indices = list(itertools.product(range(len(useqs1)), range(len(useqs1), len(useqs2) + len(useqs1))))
     else:

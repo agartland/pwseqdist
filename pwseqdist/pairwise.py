@@ -25,7 +25,7 @@ total number of sequences that are needed and then sending just those and
 translated indices."""
 
 
-def apply_pairwise_rect(metric, seqs1, *args, seqs2=None, ncpus=1, use_numba=False, uniqify=True, alphabet=parasail_aa_alphabet, **kwargs):
+def apply_pairwise_rect(metric, seqs1, *args, seqs2=None, ncpus=1, use_numba=False, uniqify=True, reexpand=True, alphabet=parasail_aa_alphabet, **kwargs):
     """Calculate distance between pairs of sequences in seqs1
     with sequences in seqs2 using metric and kwargs provided to
     metric.
@@ -163,24 +163,43 @@ def apply_pairwise_rect(metric, seqs1, *args, seqs2=None, ncpus=1, use_numba=Fal
             passing the "vector" metric. Speed is quite comparable"""
             urect = metric(pw_indices, seqs_mat, seqs_L, *args, **kwargs)
             # urect = nb_distance_vec(seqs_mat, seqs_L, pw_indices, metric, *numba_args)
-
-    if seqs2 is None:
-        urect = scipy.spatial.distance.squareform(urect, force='tomatrix')
-        if translate1:
-            urect = urect[seqs1_uind, :][:, seqs1_uind]
+    if reexpand:
+        if seqs2 is None:
+            urect = scipy.spatial.distance.squareform(urect, force='tomatrix')
+            if translate1:
+                urect = urect[seqs1_uind, :][:, seqs1_uind]
+        else:
+            urect = urect.reshape((len(useqs1), len(useqs2)))
+        
+            if translate1:
+                urect = urect[seqs1_uind, :]
+            if translate2:
+                urect = urect[:, seqs2_uind]
+        return urect
     else:
-        urect = urect.reshape((len(useqs1), len(useqs2)))
-    
-        if translate1:
-            urect = urect[seqs1_uind, :]
-        if translate2:
-            urect = urect[:, seqs2_uind]
-    return urect
+       if seqs2 is None:
+            urect = scipy.spatial.distance.squareform(urect, force='tomatrix')
+            if not translate1:
+                seqs1_uind = np.arange(urect.shape[0])
+                seqs2_uind = np.arange(urect.shape[0])
+            else:
+                seqs2_uind = seqs1_uind
+        else:
+            urect = urect.reshape((len(useqs1), len(useqs2)))
+        
+            if not translate1:
+                seqs1_uind = np.arange(urect.shape[0])
+            if not translate2:
+                seqs2_uind = np.arange(urect.shape[1])
+        """Return the unexpanded pw matrix and indices to expand along axis=0 and axis=1"""
+        return urect, seqs1_uind, seqs2_uind 
 
 def apply_pairwise_sparse(metric, seqs, pairs, *args, ncpus=1, use_numba=False, alphabet=parasail_aa_alphabet, **kwargs):
     """Calculate distance between pairs of sequences in seqs using metric and kwargs
     provided to metric. Will only compute distances specified in pairs of indices in pairs.
     Results could be used to create a sparse matrix of pairwise distances.
+
+    Disadvantage here is that there is no attempt to avoid redundant distance calculations.
 
     Will use multiprocessing Pool if ncpus > 1.
 
@@ -302,7 +321,8 @@ def apply_running_rect(metric, seqs1, seqs2, radius, density_est, *args, ncpus=1
         translate1 = True
 
     # nb_running_x(query_i, seqs_mat, seqs_L, radius, density_est=0.05, *args)
-
+    """This is wasteful. Should create a seqsmat slice of only the rect that is needed
+    each time."""
     seqs_mat, seqs_L = seqs2mat(useqs1 + seqs2, alphabet=alphabet)
     n1 = len(useqs1)
 

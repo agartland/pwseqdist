@@ -177,7 +177,7 @@ def apply_pairwise_rect(metric, seqs1, *args, seqs2=None, ncpus=1, use_numba=Fal
                 urect = urect[:, seqs2_uind]
         return urect
     else:
-       if seqs2 is None:
+        if seqs2 is None:
             urect = scipy.spatial.distance.squareform(urect, force='tomatrix')
             if not translate1:
                 seqs1_uind = np.arange(urect.shape[0])

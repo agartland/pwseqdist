@@ -84,8 +84,11 @@ class TestDistances(unittest.TestCase):
         seqs_dot = ['CACADLGAYPDKLIF']*100
         drect_dots2 = pwsd.apply_pairwise_rect(pwsd.metrics.nb_vector_tcrdist, seqs1=seqs_dot, seqs2=None, use_numba=True, ncpus=1, uniqify=False)
         drect_dots1 = pwsd.apply_pairwise_rect(pwsd.metrics.nb_vector_tcrdist, seqs1=seqs_dot, seqs2=None, use_numba=True, ncpus=1, uniqify=True)
-
         self.assertTrue((drect_dots1 == drect_dots2).all())
+
+        drect_u, uind_i, uind_j = pwsd.apply_pairwise_rect(pwsd.metrics.nb_vector_tcrdist, seqs1=seqs_dot, seqs2=None, use_numba=True, ncpus=1, uniqify=True, reexpand=False)
+        drect_dots3 = drect_u[uind_i, :][:, uind_j]
+        self.assertTrue((drect_dots1 == drect_dots3).all())
     
     def test_haming_metric(self):
         self.assertTrue(pwsd.metrics.hamming_distance(seqs[0], seqs[1]) == 4)

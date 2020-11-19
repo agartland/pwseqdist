@@ -95,11 +95,14 @@ def apply_pairwise_rect(metric, seqs1, *args, seqs2=None, ncpus=1, use_numba=Fal
     else:
         useqs = useqs1
         if len(useqs) == 1:
-            """Only one unique sequence (this is only a problem when seqs2=None"""
+            """Only one unique sequence (this is only a problem when seqs2=None)"""
             urect = np.zeros((1, 1))
-            if translate1:
-                urect = urect[seqs1_uind, :][:, seqs1_uind]
-            return urect
+            if reexpand:
+                if translate1:
+                    urect = urect[seqs1_uind, :][:, seqs1_uind]
+                return urect
+            else:
+                return urect, seqs1_uind, seqs1_uind
         else:
             pw_indices = list(itertools.combinations(range(len(useqs)), 2))
 
@@ -110,7 +113,7 @@ def apply_pairwise_rect(metric, seqs1, *args, seqs2=None, ncpus=1, use_numba=Fal
     
     if not use_numba:
         dtype = type(metric(useqs[0], useqs[0], **kwargs))
-        if ncpus > 1:
+        if ncpus > 1 and len(useqs) > 10:
             try:
                 """Was not able to get joblib to provide any speedup over 1 CPU, though did not test thoroughly.
                 multiprocessing.Pool works OK and provides speedup over 1 CPU"""
@@ -136,7 +139,7 @@ def apply_pairwise_rect(metric, seqs1, *args, seqs2=None, ncpus=1, use_numba=Fal
     else:
         seqs_mat, seqs_L = seqs2mat(useqs, alphabet=alphabet)
 
-        if ncpus > 1:
+        if ncpus > 1 and len(useqs) > 10:
             """Now a list of the chunked [chunksz x 2] arrays"""
             chunked_indices = [np.array(i, dtype=np.int64) for i in chunked_indices]
             

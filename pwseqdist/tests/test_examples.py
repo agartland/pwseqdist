@@ -2,9 +2,7 @@ import pytest
 
 def test_README_example1():
     import numpy as np
-
     import pwseqdist as pwsd
-    import multiprocessing
 
     peptides = ['CACADLGAYPDKLIF','CACDALLAYTDKLIF',
                 'CACDAVGDTLDKLIF','CACDDVTEVEGDKLIF',
@@ -12,7 +10,7 @@ def test_README_example1():
 
     dmat = pwsd.apply_pairwise_rect(seqs1  = peptides, 
                                     metric = pwsd.metrics.nw_hamming_metric, 
-                                    ncpus  = multiprocessing.cpu_count()   )
+                                    ncpus  = 2   )
 
     exp = np.array(
        [[ 0,  4,  6,  7, 15, 8],

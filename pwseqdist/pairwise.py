@@ -5,6 +5,7 @@ import scipy
 import scipy.spatial.distance
 import multiprocessing
 import parmap
+import numpy as np
 # from joblib import Parallel, delayed
 # import concurrent.futures
 
@@ -234,7 +235,9 @@ def apply_pairwise_sparse(metric, seqs, pairs, *args, ncpus=1, use_numba=False, 
     -------
     dvec : np.ndarray, length len(pairs)
         Vector of distances for each pair of indices in pairs"""
-    
+    assert np.max(np.array(pairs)) <= len(seqs), "Indices specified in pairs cannot exceed length of seqs"
+    assert np.min(np.array(pairs)) >= 0, "Indices specified in pairs cannot be less than 0"
+          
     chunk_func = lambda l, n: [l[i:i + n] for i in range(0, len(l), n)]
     chunksz = max(len(pairs) // ncpus, 1)
     chunked_indices = chunk_func(pairs, chunksz)
